@@ -6,44 +6,52 @@ This catalog provides exact file paths and line anchors for all features integra
 
 ## 1. Feature Catalog
 
-### F-01: Persistent Top Floating Studio Bar
-* **Description**: Unmistakable top-level pill toolbar (`#mermaid-studio-floating-bar`) pinned at the top of the Draw.io workspace with drag-repositioning and 1-click buttons for **✨ Paste Code ➔ Auto-Render**, **⚡ 2-Way Visual Editor**, and **🕸️ Quick Templates** (plus global shortcut `Ctrl+Shift+M`).
+### F-01: Native Draw.io Toolbar Integration (`📁 Diagrams`, `✨ Paste Code ➔ Auto-Render`, `⚡ 2-Way Visual Editor`, `🕸️ Quick Templates`)
+* **Description**: Dedicated native toolbar button group (`#mermaid-native-toolbar-group`) injected directly into Draw.io's `.geToolbar` with native light/dark theme styling (`mermaid-tb-btn`), replacing the legacy floating dark pill bar.
 * **Anchors**:
-  * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js:1605-1741` (`createFloatingStudioBar`, keyboard shortcut listener)
+  * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js:465-605` (`injectThemeStyles`, `isDarkMode`)
+  * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js:3030-3100` (`injectNativeToolbarButtons`)
 
-### F-02: Universal "Paste Code ➔ Auto-Detect & Render" Studio Modal
-* **Description**: Split-pane code-to-diagram studio (`#universal-studio-modal`) with real-time syntax auto-detection badge (`#universal-auto-detect-badge`), 10 one-click preset templates, direction/layout selectors (`TD`, `LR`, `BT`, `RL`, `Dagre` vs `ELK`), interactive zoom/pan SVG preview, background theme switcher, and 1-click insertion into Draw.io as editable shapes or crisp vector SVG.
+### F-02: Left & Right Side Panel `«` / `»` Collapse/Uncollapse Buttons
+* **Description**: Edge-mounted collapse/expand tabs (`#left-panel-collapse-btn` and `#right-panel-collapse-btn`) on the left shape library sidebar (`ui.sidebarContainer`) and right format inspector panel (`ui.formatContainer`) for 1-click distraction-free diagram viewing.
 * **Anchors**:
-  * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js:55-141` (`detectDiagramType`)
-  * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js:763-1600` (`renderCurrentCode`, `openUniversalStudio`, `insertSvgAsImageCell`)
+  * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js:3105-3220` (`setupSidePanelCollapsers`)
 
-### F-03: 1-Click Syntax Auto-Fixer & Markdown-to-Mindmap Converter
+### F-03: Visual Diagrams & Folders Workspace Hub (`📁 Diagrams`)
+* **Description**: Mermaid.ai-style visual workspace modal (`#diagrams-hub-modal`, shortcut `Ctrl+Shift+D`) featuring a folder tree (`Dashboard / All Diagrams`, `⭐ Favorites`, custom folders, `+ New Folder`), search bar, **Grid (`⊞`) / List (`☰`) view toggle**, **`💾 Save Canvas Diagram`**, and visual board cards with live SVG previews, folder assignment dropdowns, and 1-click **Open on Canvas** or **Edit in Studio**.
+* **Anchors**:
+  * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js:610-955` (`getWorkspaceData`, `saveWorkspaceData`, `DEFAULT_FOLDERS`, `DEFAULT_DIAGRAMS`)
+  * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js:1165-1715` (`openDiagramsHub`, `renderHubFolderSidebar`, `renderHubCards`)
+
+### F-04: Resizable, Collapsible & Contrast-Fixed Universal Code-to-Diagram Studio
+* **Description**: Split-pane code-to-diagram studio (`#universal-studio-modal`, shortcut `Ctrl+Shift+M`) with a draggable vertical splitter (`#studio-split-resizer`), inline `« Collapse` / `» Code Editor` buttons, `resolveLightDarkCss()` contrast-safe SVG rendering, 22+ syntax auto-detection (`detectDiagramType`), and `💾 Save to Diagrams Folder`.
+* **Anchors**:
+  * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js:65-153` (`detectDiagramType`)
+  * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js:1720-1755` (`resolveLightDarkCss`)
+  * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js:1756-3025` (`renderCurrentCode`, `openUniversalStudio`, `#studio-split-resizer`, `toggleStudioCodeEditor`)
+
+### F-05: 1-Click Syntax Auto-Fixer & Markdown-to-Mindmap Converter
 * **Description**: Automatically repairs broken Mermaid syntax (code fences, smart quotes, broken arrows, unquoted parentheses in labels, unclosed `subgraph` blocks) and converts plain Markdown headings/bullet lists into Mermaid `mindmap` syntax.
 * **Anchors**:
-  * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js:146-237` (`autoFixSyntax`, `markdownToMindmap`)
+  * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js:158-249` (`autoFixSyntax`, `markdownToMindmap`)
 
-### F-04: Custom Spider/Radar & Infographic SVG Engines
-* **Description**: Dedicated vector SVG generators for multi-series quantitative Spider/Radar web charts (`renderRadarSvg`) and publication-grade dark-slate KPI & process funnel infographics (`renderInfographicSvg`), plus sidebar stencil palettes (`radarSpider`, `mindmapsCustom`, `infographicsSuite`).
+### F-06: Deduplicated Custom Spider/Radar & Infographic SVG Engines
+* **Description**: Vector SVG generators for multi-series quantitative Spider/Radar web charts (`renderRadarSvg`) and KPI/process funnel infographics (`renderInfographicSvg`), plus guarded single-registration sidebar stencil palettes (`ui.sidebar._customMermaidPalettesAdded`).
 * **Anchors**:
-  * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js:242-502` (`renderRadarSvg`, `renderInfographicSvg`)
-  * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js:1774-1829` (`sb.addPaletteFunctions`)
+  * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js:254-462` (`renderRadarSvg`, `renderInfographicSvg`)
+  * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js:3308-3366` (`sb.addPaletteFunctions` with `_customMermaidPalettesAdded` guard)
 
-### F-05: Two-Way Visual Drag & Drop Mermaid Editor
-* **Description**: Interactive React Flow canvas where flowchart nodes can be dragged, added, or reshaped with live bidirectional updates against Mermaid code and 1-click sync back to the Draw.io canvas.
+### F-07: Enhanced 2-Way Visual Drag & Drop Mermaid Editor
+* **Description**: Interactive React Flow visual editor supporting complex flowcharts (`subgraph ID["Title"]`, `<br>`, `&amp;`, quoted parentheses, `<-- "label" -->`, `n1@{ shape: text }`), pre-loaded starter diagram on open, left-click canvas drag/pan, labeled shape creation toolbar (`+ Rect`, `+ Diamond`, `+ Circle`, `+ Stadium`), and 1-click sync back to Draw.io.
 * **Anchors**:
-  * `mermaid-visual-editor/components/Canvas.tsx:1-290`
-  * `mermaid-visual-editor/components/TopToolbar.tsx:1-265`
-  * `mermaid-visual-editor/app/page.tsx:1-130`
-  * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js:561-741` (`openVisualMermaidEditor`, `applyMermaidToCanvas`)
+  * `mermaid-visual-editor/lib/parser.ts:1-600` (`parseMermaidFlowchart`, `extractBalancedShape`)
+  * `mermaid-visual-editor/components/Canvas.tsx:1-310`
+  * `mermaid-visual-editor/components/TopToolbar.tsx:1-290`
+  * `mermaid-visual-editor/app/page.tsx:1-165`
+  * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js:960-1160` (`openVisualMermaidEditor`, `applyMermaidToCanvas`)
 
-### F-06: Native Export to Vector SVG, PNG, and PDF
-* **Description**: Exports diagrams directly from the Universal Studio (`💾 Export SVG`, `📷 Export PNG`) or from the main Draw.io canvas (`File > Export as > SVG / PNG / PDF`).
-* **Anchors**:
-  * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js:1505-1561`
-  * `drawio-desktop/drawio/src/main/webapp/js/diagramly/EditorUi.js` (`exportSvg`, `exportFile`, `createPdf`)
-
-### F-07: Portable Desktop Executable
-* **Description**: Standalone portable single `.exe` executable (`MermaidApp-draw.io-v32.6.1-Portable.exe`) and unpacked desktop binary (`releases/win-unpacked/MermaidApp-draw.io.exe`) running offline on Windows 10/11 x64.
+### F-08: Native Export to Vector SVG, PNG, and PDF & Portable Desktop Executable
+* **Description**: Exports diagrams directly from the Universal Studio (`Export SVG`, `Export PNG`) or Draw.io (`File > Export as > SVG / PNG / PDF`), packaged into `releases/MermaidApp-draw.io-v32.6.1-Portable.exe`.
 * **Anchors**:
   * `releases/MermaidApp-draw.io-v32.6.1-Portable.exe`
   * `drawio-desktop/electron-builder-win.json:1-69`

@@ -2,72 +2,74 @@
 
 ## 1. High-Level System Architecture
 
-MermaidApp Studio merges three visual diagramming engines into a unified offline desktop suite:
-1. **Host Environment**: **draw.io Desktop** (`jgraph/drawio-desktop` v32.6.1 + `jgraph/drawio`), powered by Electron, Node.js, and the `mxGraph` canvas.
-2. **Universal Code-to-Diagram Auto-Detect Studio**: A full-screen split-pane studio modal (`#universal-studio-modal`) and persistent top floating pill launcher (`#mermaid-studio-floating-bar`) inside `plugins/mermaid-visual-editor.js` that auto-detects 22+ diagram syntaxes as you type or paste, repairs broken LLM/Mermaid syntax, and renders live interactive SVG previews.
-3. **2-Way Visual Drag & Drop Component**: **`mermaid-visual-editor`**, built with Next.js (exported as a static client-side bundle) using `@xyflow/react` (React Flow), `@dagrejs/dagre`, `zustand`, and `mermaid` core, synchronized via an iframe-to-host `postMessage` bridge.
+MermaidApp Studio merges four visual diagramming engines and workspace tools into a unified offline desktop suite that matches Draw.io's native Light/Dark UI/UX:
+1. **Host Environment**: **draw.io Desktop** (`jgraph/drawio-desktop` v32.6.1 + `jgraph/drawio`), powered by Electron, Node.js, and the `mxGraph` canvas, augmented with native toolbar buttons (`#mermaid-native-toolbar-group`) and collapsible side panel tabs (`#left-panel-collapse-btn`, `#right-panel-collapse-btn`).
+2. **Visual Diagrams & Folders Workspace Hub (`#diagrams-hub-modal`)**: A Mermaid.ai-inspired folder and visual board management hub with `localStorage` persistence (`mermaidApp_workspace_v1`), folder hierarchy (`All Diagrams`, `⭐ Favorites`, `Personal`, `Novel Pipeline & Architecture`, `Radar & Infographics`, `+ New Folder`), live SVG card thumbnails, Grid (`⊞`) / List (`☰`) view switcher, and 1-click **Open on Canvas** or **Edit in Studio**.
+3. **Universal Code-to-Diagram Auto-Detect Studio (`#universal-studio-modal`)**: A split-pane studio modal inside `plugins/mermaid-visual-editor.js` with a draggable vertical splitter (`#studio-split-resizer`), collapsible code editor pane (`« Collapse` / `» Code Editor`), contrast-corrected `resolveLightDarkCss()` SVG renderer, and real-time auto-detection across 22+ diagram syntaxes.
+4. **2-Way Visual Drag & Drop Component (`mermaid-visual-editor`)**: Built with Next.js (exported as a static client-side bundle) using `@xyflow/react` (React Flow), `@dagrejs/dagre`, `zustand`, and `mermaid` core, synchronized via an iframe-to-host `postMessage` bridge (`LOAD_MERMAID`, `GET_MERMAID`, `MERMAID_SYNC`).
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                           draw.io Desktop Host                               │
-│  (Electron 44.9.3 + mxGraph + Local Node Backend + Multi-Engine Plugin)      │
+│  (Electron + mxGraph + Native Toolbar Group + Side Panel « / » Collapsers)   │
 │                                                                              │
 │  ┌────────────────────────────────────────────────────────────────────────┐  │
-│  │        Persistent Top Floating Studio Bar (#mermaid-studio-floating-bar)│  │
-│  │  [✨ Paste Code ➔ Auto-Render] [⚡ 2-Way Visual Editor] [🕸️ Templates]  │  │
-│  └──────────────────┬───────────────────────────────────┬─────────────────┘  │
-│                     │                                   │                    │
-│                     ▼                                   ▼                    │
-│  ┌─────────────────────────────────────┐ ┌────────────────────────────────┐  │
-│  │ Universal Code-to-Diagram Studio    │ │ 2-Way Visual Editor (mxWindow) │  │
-│  │ - Auto-Detect Engine (22+ formats)  │ │ - Iframe: mermaid-visual-editor│  │
-│  │ - 1-Click Syntax Auto-Fixer         │ │ - React Flow Drag & Drop       │  │
-│  │ - Radar/Spider & Infographic Engines│ │ - Bidirectional AST Sync       │  │
-│  │ - Live Zoom/Pan SVG Preview         │ └──────────────┬─────────────────┘  │
-│  └──────────────────┬──────────────────┘                │                    │
-│                     │ (Editable Shapes or Crisp SVG)    │ (MERMAID_SYNC)     │
-│                     ▼                                   ▼                    │
+│  │        Native Draw.io Toolbar (#mermaid-native-toolbar-group)          │  │
+│  │  [📁 Diagrams] [✨ Paste Code ➔ Auto-Render] [⚡ 2-Way Visual Editor]   │  │
+│  │  [🕸️ Quick Templates]                                                  │  │
+│  └──────┬─────────────────────────┬──────────────────────────┬────────────┘  │
+│         │                         │                          │               │
+│         ▼                         ▼                          ▼               │
+│  ┌─────────────────────┐ ┌────────────────────────┐ ┌─────────────────────┐  │
+│  │ 📁 Diagrams Hub     │ │ ✨ Universal Studio     │ │ ⚡ 2-Way Visual Ed.  │  │
+│  │ - Folder Tree       │ │ - Draggable Splitter   │ │ - React Flow Canvas │  │
+│  │ - Grid / List Views │ │ - « Collapse Code Pane │ │ - Labeled Shape Bar │  │
+│  │ - Live SVG Previews │ │ - Contrast-Fixed SVG   │ │ - Subgraph & HTML   │  │
+│  │ - + New Folder      │ │ - 22+ Syntax Engines   │ │   Parser + Sync     │  │
+│  └──────┬──────────────┘ └────────┬───────────────┘ └────────┬────────────┘  │
+│         │                         │                          │               │
+│         └─────────────────────────┼──────────────────────────┘               │
+│                                   ▼                                          │
 │  ┌────────────────────────────────────────────────────────────────────────┐  │
 │  │               Draw.io Canvas (mxGraph Model & Exporter)                │  │
-│  │  - Native Editable mxCells & Stencil Palettes                          │  │
-│  │  - Vector SVG, High-DPI PNG, and PDF Export                            │  │
+│  │  - Left «/» & Right »/« Collapsible Panels for Distraction-Free Focus  │  │
+│  │  - Native Editable mxCells, Vector SVG, High-DPI PNG, and PDF Export   │  │
 │  └────────────────────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 2. Universal Code-to-Diagram Auto-Detection & Rendering Pipeline
+## 2. Native UI/UX Integration & Collapsible Workspace Layout
 
-1. **Instant Syntax Auto-Detection (`detectDiagramType`)**:
-   * Inspects pasted or typed input on a 250ms debounce and classifies it into one of 22+ diagram types:
-     * **Mermaid Native (19 types)**: `flowchart` / `graph`, `sequenceDiagram`, `classDiagram`, `stateDiagram-v2`, `erDiagram`, `gantt`, `pie`, `mindmap`, `timeline`, `gitGraph`, `journey`, `quadrantChart`, `xychart-beta`, `block-beta`, `packet-beta`, `kanban`, `sankey-beta`, `architecture-beta`, `C4Context`.
-     * **Spider / Radar DSL**: `radar` / `spider` / `radar-beta` multi-axis quantitative series.
-     * **Infographic KPI & Funnel DSL**: `infographic` cards with KPI metric grids and process steps.
-     * **Markdown / Bullet Outlines**: `# Heading` or `- Bullet` hierarchies automatically converted on the fly into `mindmap` syntax via `markdownToMindmap()`.
-     * **PlantUML**: `@startuml ... @enduml` blocks parsed offline via `mxPlantUmlToDrawio`.
-
-2. **1-Click Syntax Auto-Fixer (`autoFixSyntax`)**:
-   * Strips markdown code fences (```` ```mermaid ````), replaces smart quotes (`""''`) with straight ASCII quotes, repairs malformed arrows (`->` to `-->` in flowcharts), auto-quotes node labels containing unquoted parentheses `[Label (Info)]` ➔ `["Label (Info)"]`, and appends missing `end` statements for unclosed `subgraph` blocks.
-
-3. **Multi-Engine Live Preview & Canvas Insertion**:
-   * Renders live vector SVG into an interactive pan-and-zoom viewport (`#universal-preview-container`).
-   * **⚡ Insert as Editable Shapes**: Converts the diagram into native Draw.io `mxCell` vertices and edges (`ui.parseMermaidDiagram` + `mxMermaidToDrawio.wrapGroup` or `ui.parsePlantUmlDiagram`).
-   * **🖼️ Insert as Crisp Vector SVG**: Embeds a high-DPI scalable `shape=image;image=data:image/svg+xml...` cell on the Draw.io canvas (`insertSvgAsImageCell`), ideal for Radar/Spider charts and Infographic cards.
+1. **Native Toolbar Buttons (`injectNativeToolbarButtons`)**:
+   * Appends a `.geSeparator` and `#mermaid-native-toolbar-group` directly into `ui.toolbar.container` (`.geToolbar`), replacing the legacy floating dark bar.
+   * Dynamically adapts button colors, borders, and hover states to Draw.io's active theme (`isDarkMode()`).
+2. **Left & Right Side Panel Collapse/Uncollapse Tabs (`setupSidePanelCollapsers`)**:
+   * Mounts `#left-panel-collapse-btn` (`«` / `»`) along the inner edge of `ui.sidebarContainer` and `#right-panel-collapse-btn` (`»` / `«`) along the inner edge of `ui.formatContainer`.
+   * Clicking toggles `ui.hsplitPosition` / `ui.toggleFormatPanel()`, invokes `ui.refresh()` and `graph.sizeDidChange()`, and repositions the collapse tab cleanly to `0px` when collapsed.
+3. **Visual Diagrams & Folders Workspace Hub (`openDiagramsHub`)**:
+   * Persists folders and diagram cards in `localStorage` under `mermaidApp_workspace_v1`, pre-seeded with 6 visual templates (including the user's `3-Chat Firewall & File Access` and `End-to-End Novel Pipeline` flowcharts).
+   * Supports creating custom folders (`+ New Folder`), assigning diagrams to folders, starring favorites, toggling between Grid (`⊞`) and List (`☰`) views, saving the active Draw.io canvas (`💾 Save Canvas Diagram`), and opening any card on the canvas or in the Universal Studio.
 
 ---
 
-## 3. Bidirectional Data Flow Lifecycle (2-Way Visual Editor)
+## 3. Universal Code-to-Diagram Studio & Contrast-Safe SVG Pipeline
 
-1. **Extraction (Draw.io ➔ Visual Editor)**:
-   * Selecting a diagram cell and clicking **⚡ 2-Way Visual Editor** reads `cell.value` or `mermaidData` and dispatches:
-     ```javascript
-     editorIframe.contentWindow.postMessage({ type: 'LOAD_MERMAID', syntax: code }, '*');
-     ```
-   * Inside `mermaid-visual-editor`, `app/page.tsx` parses the syntax via `parseMermaidFlowchart(syntax)` and populates React Flow's reactive store (`useFlowStore`).
+1. **Resizable & Collapsible Split-Pane Layout**:
+   * Features a 10px draggable vertical splitter (`#studio-split-resizer`) between `#studio-code-pane` and `#studio-preview-pane` (supporting widths from `180px` up to `75%` of the modal width).
+   * Includes an inline `« Collapse` button in the editor header and a floating `» Code Editor` restore tab in the preview pane for 100% fullscreen diagram inspection.
+2. **Contrast-Safe Light/Dark SVG Resolution (`resolveLightDarkCss`)**:
+   * Draw.io's `ui.getSvgForXml()` emits CSS `light-dark(lightVal, darkVal)` functions with `color-scheme: light dark`. When the OS is in dark mode while the diagram preview uses a light background (`#ffffff`) and light-yellow Mermaid subgraphs (`#ffffde`), browsers evaluate `light-dark(#000000, #ffffff)` to `#ffffff` (white text on white/yellow fill).
+   * `resolveLightDarkCss(svgStr, previewTheme)` strips conflicting `color-scheme` declarations and resolves every `light-dark(a, b)` expression deterministically to `a` (in light preview mode) or `b` (in dark preview mode), guaranteeing high-contrast legibility.
 
-2. **Manipulation (Visual Drag-and-Drop)**:
-   * Nodes and edges can be dragged, added, or connected on the React Flow canvas while `serialize(nodes, edges, config)` recomputes valid `.mmd` syntax.
+---
 
-3. **Injection & Render (Visual Editor ➔ Draw.io)**:
-   * Clicking **Sync to Draw.io** dispatches `window.parent.postMessage({ type: 'MERMAID_SYNC', syntax }, '*')`, updating the active Draw.io cell in place.
+## 4. Bidirectional Data Flow Lifecycle (2-Way Visual Editor)
+
+1. **Enhanced Mermaid Flowchart Parser (`mermaid-visual-editor/lib/parser.ts`)**:
+   * Supports `flowchart` and `graph` headers across `TD`, `TB`, `LR`, `BT`, and `RL` directions.
+   * Normalizes `<br/>` / `<br>` tags to newlines, decodes `&amp;`, `&lt;`, `&gt;`, `&quot;` entities, parses `subgraph ID["Title"]` (with or without space before `[`), ignores parentheses inside quoted labels during `extractBalancedShape`, supports bidirectional labeled arrows (`<-- "label" -->`, `<-. label .->`), and converts Mermaid v11 `n1@{ shape: text }` blocks.
+2. **Interactive React Flow Canvas (`components/Canvas.tsx` & `components/TopToolbar.tsx`)**:
+   * Pre-loads a 5-node interactive starter flowchart whenever opened on an empty selection so the user immediately sees draggable nodes and edges.
+   * Enables left-click canvas panning (`panOnDrag={!drawingShape}`), labeled top toolbar shape buttons (`+ Rect`, `+ Diamond`, `+ Circle`, `+ Stadium`, `⚡ Sync to Draw.io`), and bidirectional `GET_MERMAID` / `MERMAID_SYNC` message handling.
