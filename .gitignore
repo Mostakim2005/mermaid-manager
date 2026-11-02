@@ -1,0 +1,7 @@
+node_modules/
+dist/
+win-unpacked/
+*.nsis.7z
+.next/
+.cache/
+update_toolbar.js
