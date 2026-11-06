@@ -25,7 +25,7 @@ MermaidApp/                     root repo (docs/, scripts/)
 ├── scripts/
 │   ├── sync-visual-editor.cjs  build editor + atomically swap it into the webapp
 │   └── verify-ipc-integration.mjs  end-to-end CDP regression test (real app)
-└── releases/                   packaged portable exe (NOT rebuilt this session)
+└── releases/                   packaged portable exe (rebuilt 2026-11-06 with all fixes)
 ```
 
 ## What was fixed this session (all in `docs/BUGS.md` as BUG-009…013)
@@ -113,7 +113,7 @@ cd drawio-desktop; npm run sync; $env:DRAWIO_UNSIGNED='true'; npx electron-build
 
 - **Generate AI panel** (DeepSeek/Gemini selector, CLI+API routes) — user
   deferred; no such panel exists in this codebase.
-- **`releases/MermaidApp-draw.io-…-Portable.exe`** predates all of these fixes;
+- **`releases/MermaidApp-draw.io-v32.6.1-Portable.exe`** REBUILT 2026-11-06 10:28 with all fixes (verified: all BUG-009…013 markers present in the asar; hub dialog, visual editor hydration and IPC round-trip re-tested against the packaged exe via `scripts/verify-packaged-exe.mjs`). Rebuild with:
   needs an electron-builder run to pick them up.
 - In-app-created (non-disk) hub folders remain virtual (localStorage) by design;
   disk folders are the on-disk surface.
