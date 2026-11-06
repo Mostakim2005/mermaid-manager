@@ -1,75 +1,139 @@
-# Architecture Specification - MermaidApp Studio
+# System Architecture (`ARCHITECTURE.md`)
+> **1-Line Summary:** Plain-English visual map of how the app works, why we chose each tool, and step-by-step recipes for adding new features.
 
-## 1. High-Level System Architecture
+## 1. High-Level Visual System Map
 
-MermaidApp Studio merges four visual diagramming engines and workspace tools into a unified offline desktop suite that matches Draw.io's native Light/Dark UI/UX:
-1. **Host Environment**: **draw.io Desktop** (`jgraph/drawio-desktop` v32.6.1 + `jgraph/drawio`), powered by Electron, Node.js, and the `mxGraph` canvas, augmented with native toolbar buttons (`#mermaid-native-toolbar-group`) and collapsible side panel tabs (`#left-panel-collapse-btn`, `#right-panel-collapse-btn`).
-2. **Visual Diagrams & Folders Workspace Hub (`#diagrams-hub-modal`)**: A Mermaid.ai-inspired folder and visual board management hub with `localStorage` persistence (`mermaidApp_workspace_v1`), folder hierarchy (`All Diagrams`, `⭐ Favorites`, `Personal`, `Novel Pipeline & Architecture`, `Radar & Infographics`, `+ New Folder`), live SVG card thumbnails, Grid (`⊞`) / List (`☰`) view switcher, and 1-click **Open on Canvas** or **Edit in Studio**.
-3. **Universal Code-to-Diagram Auto-Detect Studio (`#universal-studio-modal`)**: A split-pane studio modal inside `plugins/mermaid-visual-editor.js` with a draggable vertical splitter (`#studio-split-resizer`), collapsible code editor pane (`« Collapse` / `» Code Editor`), contrast-corrected `resolveLightDarkCss()` SVG renderer, and real-time auto-detection across 22+ diagram syntaxes.
-4. **2-Way Visual Drag & Drop Component (`mermaid-visual-editor`)**: Built with Next.js (exported as a static client-side bundle) using `@xyflow/react` (React Flow), `@dagrejs/dagre`, `zustand`, and `mermaid` core, synchronized via an iframe-to-host `postMessage` bridge (`LOAD_MERMAID`, `GET_MERMAID`, `MERMAID_SYNC`).
+```mermaid
+flowchart TB
+    subgraph Host["draw.io Desktop Host (Electron 44)"]
+        MAIN["Main Process<br/>electron.js<br/>(IPC + path security)"]
+        WEBAPP["draw.io Webapp (mxGraph)"]
+        PLUGIN["Mermaid Studio Plugin<br/>plugins/mermaid-visual-editor.js"]
+        WEBAPP --> PLUGIN
+    end
 
-```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                           draw.io Desktop Host                               │
-│  (Electron + mxGraph + Native Toolbar Group + Side Panel « / » Collapsers)   │
-│                                                                              │
-│  ┌────────────────────────────────────────────────────────────────────────┐  │
-│  │        Native Draw.io Toolbar (#mermaid-native-toolbar-group)          │  │
-│  │  [📁 Diagrams] [✨ Paste Code ➔ Auto-Render] [⚡ 2-Way Visual Editor]   │  │
-│  │  [🕸️ Quick Templates]                                                  │  │
-│  └──────┬─────────────────────────┬──────────────────────────┬────────────┘  │
-│         │                         │                          │               │
-│         ▼                         ▼                          ▼               │
-│  ┌─────────────────────┐ ┌────────────────────────┐ ┌─────────────────────┐  │
-│  │ 📁 Diagrams Hub     │ │ ✨ Universal Studio     │ │ ⚡ 2-Way Visual Ed.  │  │
-│  │ - Folder Tree       │ │ - Draggable Splitter   │ │ - React Flow Canvas │  │
-│  │ - Grid / List Views │ │ - « Collapse Code Pane │ │ - Labeled Shape Bar │  │
-│  │ - Live SVG Previews │ │ - Contrast-Fixed SVG   │ │ - Subgraph & HTML   │  │
-│  │ - + New Folder      │ │ - 22+ Syntax Engines   │ │   Parser + Sync     │  │
-│  └──────┬──────────────┘ └────────┬───────────────┘ └────────┬────────────┘  │
-│         │                         │                          │               │
-│         └─────────────────────────┼──────────────────────────┘               │
-│                                   ▼                                          │
-│  ┌────────────────────────────────────────────────────────────────────────┐  │
-│  │               Draw.io Canvas (mxGraph Model & Exporter)                │  │
-│  │  - Left «/» & Right »/« Collapsible Panels for Distraction-Free Focus  │  │
-│  │  - Native Editable mxCells, Vector SVG, High-DPI PNG, and PDF Export   │  │
-│  └────────────────────────────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────────────────────────┘
+    subgraph Editor["2-Way Visual Editor (Next.js static export)"]
+        RF["React Flow Canvas<br/>+ Zustand store"]
+        SER["serializer.ts / parser.ts"]
+        RF --> SER
+    end
+
+    subgraph Storage["Persistence"]
+        LS[("localStorage<br/>mermaidApp_workspace_v1")]
+        DISK[("Blessed PC Folders<br/>.mmd / .md / .drawio")]
+    end
+
+    USER("User") --> WEBAPP
+    PLUGIN -->|"postMessage bridge<br/>LOAD_MERMAID / GET_MERMAID / MERMAID_SYNC"| RF
+    PLUGIN -->|"prompt-free dialogs,<br/>SVG screenshots"| WEBAPP
+    PLUGIN --> LS
+    RF -->|"iframe msg"| PLUGIN
+    PLUGIN -->|"mermaidListFolder / ReadFile /<br/>WriteFile / DeleteFile"| MAIN
+    MAIN -->|"realpath + blessed-path checks"| DISK
 ```
 
----
+## 2. Tech Stack & Why We Chose It
 
-## 2. Native UI/UX Integration & Collapsible Workspace Layout
+| Layer | Tool / Library | Plain-English Reason Why |
+| --- | --- | --- |
+| Host / UI | draw.io Desktop fork (Electron 44 + mxGraph) | Full diagram editor for free; our features inject as one plugin |
+| Visual editor | Next.js 16 static export + @xyflow/react 12 + Zustand + dagre | Drag-and-drop canvas that exports to plain `.html`/`.js` loads inside draw.io over `file://` |
+| Diagram engine | mermaid 11.12 (inside draw.io's own parser) | Keeps diagrams as editable text and matches draw.io's native Mermaid rendering |
+| Disk access | Electron IPC (rendererReq actions) | The web sandbox cannot touch the disk; the main process enforces draw.io's blessed-path security model |
+| Cloud builds | GitHub Actions windows-latest + electron-builder | Free cloud compile of the portable `.exe` on every tag; nothing heavy stored in Git |
+| Package manager | pnpm (editor), npm (drawio-desktop) | Matches each upstream project's own tooling |
 
-1. **Native Toolbar Buttons (`injectNativeToolbarButtons`)**:
-   * Appends a `.geSeparator` and `#mermaid-native-toolbar-group` directly into `ui.toolbar.container` (`.geToolbar`), replacing the legacy floating dark bar.
-   * Dynamically adapts button colors, borders, and hover states to Draw.io's active theme (`isDarkMode()`).
-2. **Left & Right Side Panel Collapse/Uncollapse Tabs (`setupSidePanelCollapsers`)**:
-   * Mounts `#left-panel-collapse-btn` (`«` / `»`) along the inner edge of `ui.sidebarContainer` and `#right-panel-collapse-btn` (`»` / `«`) along the inner edge of `ui.formatContainer`.
-   * Clicking toggles `ui.hsplitPosition` / `ui.toggleFormatPanel()`, invokes `ui.refresh()` and `graph.sizeDidChange()`, and repositions the collapse tab cleanly to `0px` when collapsed.
-3. **Visual Diagrams & Folders Workspace Hub (`openDiagramsHub`)**:
-   * Persists folders and diagram cards in `localStorage` under `mermaidApp_workspace_v1`, pre-seeded with 6 visual templates (including the user's `3-Chat Firewall & File Access` and `End-to-End Novel Pipeline` flowcharts).
-   * Supports creating custom folders (`+ New Folder`), assigning diagrams to folders, starring favorites, toggling between Grid (`⊞`) and List (`☰`) views, saving the active Draw.io canvas (`💾 Save Canvas Diagram`), and opening any card on the canvas or in the Universal Studio.
+## 3. Core Subsystems & Engineering Tricks
 
----
+### [SUBSYSTEM: Plugin Injection Lifecycle] | Aliases: plugin loading, idempotent registration, duplicate palettes
+> **1-Line Summary:** The whole studio injects as a single webapp plugin that draw.io loads after its async bootstrap, guarded by a window-global flag so palettes and buttons register exactly once.
+* **How It Works (Plain English):** `ElectronApp.js` calls the plugin right after `App.initPluginCallback()`; the plugin guards with `window.__mermaidStudioPluginInitialized` and stamps `ui.sidebar._customMermaidPalettesAdded` before adding palette functions.
+* **Code Anchors (Grep Targets):**
+  * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js` -> `initMermaidStudioPlugin`, `window.__mermaidStudioPluginInitialized`
+  * `drawio-desktop/drawio/src/main/webapp/js/diagramly/ElectronApp.js` -> mxscript injection after `App.initPluginCallback()`
 
-## 3. Universal Code-to-Diagram Studio & Contrast-Safe SVG Pipeline
+### [SUBSYSTEM: Two-Way PostMessage Bridge] | Aliases: LOAD_MERMAID, GET_MERMAID, MERMAID_SYNC, iframe bridge
+> **1-Line Summary:** The React editor lives in an iframe and talks to the plugin through four message types so the canvas and the Mermaid text never drift apart.
+* **How It Works (Plain English):** `MERMAID_EDITOR_READY` → parent pushes selected cell code with `LOAD_MERMAID`; user edits; `GET_MERMAID` asks the editor to reply with `MERMAID_SYNC`; `Apply to Draw.io Canvas` converts the text into real mxCells.
+* **Data Flow Diagram:**
 
-1. **Resizable & Collapsible Split-Pane Layout**:
-   * Features a 10px draggable vertical splitter (`#studio-split-resizer`) between `#studio-code-pane` and `#studio-preview-pane` (supporting widths from `180px` up to `75%` of the modal width).
-   * Includes an inline `« Collapse` button in the editor header and a floating `» Code Editor` restore tab in the preview pane for 100% fullscreen diagram inspection.
-2. **Contrast-Safe Light/Dark SVG Resolution (`resolveLightDarkCss`)**:
-   * Draw.io's `ui.getSvgForXml()` emits CSS `light-dark(lightVal, darkVal)` functions with `color-scheme: light dark`. When the OS is in dark mode while the diagram preview uses a light background (`#ffffff`) and light-yellow Mermaid subgraphs (`#ffffde`), browsers evaluate `light-dark(#000000, #ffffff)` to `#ffffff` (white text on white/yellow fill).
-   * `resolveLightDarkCss(svgStr, previewTheme)` strips conflicting `color-scheme` declarations and resolves every `light-dark(a, b)` expression deterministically to `a` (in light preview mode) or `b` (in dark preview mode), guaranteeing high-contrast legibility.
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant P as Plugin (host)
+    participant E as Editor iframe
+    U->>P: Click "2-Way Visual Editor"
+    P->>E: LOAD_MERMAID (selected cell code)
+    U->>E: Drag nodes / connect edges
+    E->>E: serialize() live .mmd
+    U->>P: Click "Apply to Draw.io Canvas"
+    P->>E: GET_MERMAID
+    E->>P: MERMAID_SYNC (syntax)
+    P->>U: draw.io cells on canvas
+```
 
----
+* **Code Anchors (Grep Targets):**
+  * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js` -> `openVisualMermaidEditor`, `applyMermaidToCanvas`, `window.addEventListener('message')`
+  * `mermaid-visual-editor/app/page.tsx` -> `handleMessage`
 
-## 4. Bidirectional Data Flow Lifecycle (2-Way Visual Editor)
+### [SUBSYSTEM: Blessed-Path IPC Disk Access] | Aliases: folder authorization, mermaid IPC, file security
+> **1-Line Summary:** The hub's disk powers go through four main-process actions that only trust folders the user picked in the native dialog, re-deriving every child path safely on the trusted side.
+* **How It Works (Plain English):** `showOpenDialog` blesses the picked folder (persisted in `%APPDATA%\draw.io\config.json` under `blessedPaths`). Each IPC call re-checks the blessing with native realpaths, sanitizes the child name (no `..`, no separators, no Windows device names), keeps it inside the folder, and caps content at 5 MB with an extension allow-list.
+* **Data Flow Diagram:**
 
-1. **Enhanced Mermaid Flowchart Parser (`mermaid-visual-editor/lib/parser.ts`)**:
-   * Supports `flowchart` and `graph` headers across `TD`, `TB`, `LR`, `BT`, and `RL` directions.
-   * Normalizes `<br/>` / `<br>` tags to newlines, decodes `&amp;`, `&lt;`, `&gt;`, `&quot;` entities, parses `subgraph ID["Title"]` (with or without space before `[`), ignores parentheses inside quoted labels during `extractBalancedShape`, supports bidirectional labeled arrows (`<-- "label" -->`, `<-. label .->`), and converts Mermaid v11 `n1@{ shape: text }` blocks.
-2. **Interactive React Flow Canvas (`components/Canvas.tsx` & `components/TopToolbar.tsx`)**:
-   * Pre-loads a 5-node interactive starter flowchart whenever opened on an empty selection so the user immediately sees draggable nodes and edges.
-   * Enables left-click canvas panning (`panOnDrag={!drawingShape}`), labeled top toolbar shape buttons (`+ Rect`, `+ Diamond`, `+ Circle`, `+ Stadium`, `⚡ Sync to Draw.io`), and bidirectional `GET_MERMAID` / `MERMAID_SYNC` message handling.
+```mermaid
+sequenceDiagram
+    participant H as Hub (renderer)
+    participant M as Main process
+    participant F as Disk folder
+    H->>M: mermaidListFolder(folder)
+    M->>M: assertReadablePath + realpath
+    M->>F: readdir (mmd/md/markdown only)
+    F-->>M: entries
+    M-->>H: [{name, size, mtime}]
+    H->>M: mermaidReadFile(folder, name)
+    M->>M: sanitize name + containment check
+    M->>F: readFile (≤5 MB, utf8)
+    F-->>M: text
+    M-->>H: Mermaid source
+```
+
+* **Code Anchors (Grep Targets):**
+  * `drawio-desktop/src/main/electron.js` -> `mermaidAuthFolder`, `mermaidContainedChild`, `reqMermaidName`, `showOpenDialog`, `assertWritablePath`, `assertReadablePath`
+  * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js` -> `ipcRequest`, `pickDiskFolder`, `scanDiskFolder`
+
+### [SUBSYSTEM: Contrast-Safe SVG Pipeline] | Aliases: light-dark, contrast inversion, dark mode text
+> **1-Line Summary:** Every SVG the studio previews has its `light-dark()` pairs resolved with paren-aware parsing and its `color-scheme` pinned, so OS dark mode can never invert text on a light canvas.
+* **How It Works (Plain English):** draw.io emits `fill: light-dark(a, b)` with commas inside `rgb(...)`. A naive comma split mangles them. `splitLightDarkArgs` walks the args with parenthesis depth, picks the value for the canvas being drawn on, and rewrites `color-scheme` to match.
+* **Code Anchors (Grep Targets):**
+  * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js` -> `resolveLightDarkCss`, `splitLightDarkArgs`, `parseCssColor`, `contrastRatio`
+
+### [SUBSYSTEM: Visual Editor Bundle Sync] | Aliases: next build, bundle swap, out directory, hydration
+> **1-Line Summary:** A sync script builds the Next.js editor and atomically swaps it into the webapp, keeping absolute `/_next/` URLs so the Turbopack runtime can still find its chunks over `file://`.
+* **How It Works (Plain English):** Build → verify every referenced chunk exists on disk → stage a fresh copy → swap the directory in one rename → re-check for stale chunks. electron.js redirects any `/_next/*` request into the bundled folder.
+* **Code Anchors (Grep Targets):**
+  * `scripts/sync-visual-editor.cjs` -> build pipeline + `fs.renameSync` swap
+  * `drawio-desktop/src/main/electron.js` -> `onBeforeRequest` `/_next/` redirect
+
+## 4. Verification & Health Checks
+
+### [VERIFY: Automated Check Suite] | Aliases: test commands, build check, regression, CDP verification
+> **1-Line Summary:** Commands every AI must run to prove nothing broke before committing.
+
+* **Syntax gates (main process + plugin):**
+  `node --check drawio-desktop/src/main/electron.js`
+  `node --check "drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js"`
+* **Editor build:** `node scripts/sync-visual-editor.cjs` (builds with Next/Turbopack, fails on missing chunks)
+* **Editor unit tests:** `node --test mermaid-visual-editor/lib/fileio.test.ts mermaid-visual-editor/lib/serializer.test.ts mermaid-visual-editor/lib/store.test.ts`
+* **End-to-end app regression (real Electron over CDP):** `node scripts/verify-ipc-integration.mjs <drawio-desktop path>` — asserts hydration, hub dialogs, IPC round-trip, and security refusals
+* **Packaged exe regression:** `node scripts/verify-packaged-exe.mjs <releases path>`
+* **Portable exe packaging:** `cd drawio-desktop; node ./sync.cjs; $env:DRAWIO_UNSIGNED='true'; npx electron-builder --config electron-builder-win.json --publish never`
+
+## 5. Recipes: How to Add New Things Safely
+
+* **To add a new toolbar button:** edit `plugins/mermaid-visual-editor.js` -> `injectNativeToolbarButtons` (use class `mermaid-tb-btn`; reuse `openUniversalStudio`/`openVisualMermaidEditor` for actions).
+* **To add a new diagram type to the Studio:** extend `detectDiagramType` with a new header regex, then add a render branch in `renderCurrentCode` (mirror the radar/infographic engines for custom SVG renderers).
+* **To add a new auto-fix rule:** append a repair function in the auto-fixer section, register it in the ordered `steps` list of `autoFixSyntaxDetailed`, and keep it idempotent (running it twice must not change output).
+* **To add a new IPC disk action:** follow the `mermaidWriteFile` pattern — `reqStr` every argument, route through `mermaidAuthFolder` + `mermaidContainedChild`, and cap content size.
+* **To add a new hub folder type:** extend the folder object in `addDiskFolder`, guard rendering with a `kind` check like `isDiskFolder`, and update the delete/rescan branches in `renderHubView`.
+* **To rebuild everything after changing the visual editor:** `node scripts/sync-visual-editor.cjs` then re-run the verification suite above; never hand-copy `out/` into the webapp.

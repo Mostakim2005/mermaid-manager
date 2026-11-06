@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mermaid Manager — Visual Dashboard</title>
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+  </script>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --border: #334155;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --success: #22c55e;
+      --warn: #f59e0b;
+      --danger: #ef4444;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 24px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    header { border-bottom: 1px solid var(--border); padding-bottom: 16px; margin-bottom: 24px; }
+    h1 { font-size: 1.75rem; color: var(--accent); }
+    .subtitle { color: var(--muted); font-size: 0.95rem; margin-top: 4px; }
+    .tabs { display: flex; gap: 10px; margin-bottom: 24px; flex-wrap: wrap; }
+    .tab-btn {
+      background: var(--surface); color: var(--text); border: 1px solid var(--border);
+      padding: 10px 18px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 0.95rem;
+    }
+    .tab-btn.active { background: var(--accent); color: #0f172a; border-color: var(--accent); }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px; margin-bottom: 16px; }
+    .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px; }
+    .card-title { font-size: 1.15rem; font-weight: 700; color: #fff; }
+    .badge { font-size: 0.78rem; padding: 3px 10px; border-radius: 999px; font-weight: 600; }
+    .badge-human { background: rgba(56, 189, 248, 0.2); color: var(--accent); }
+    .badge-agent { background: rgba(34, 197, 94, 0.2); color: var(--success); }
+    .badge-trap { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
+    .badge-wish { background: rgba(245, 158, 11, 0.2); color: var(--warn); }
+    .summary { color: var(--accent); font-weight: 500; margin-bottom: 12px; padding-left: 10px; border-left: 3px solid var(--accent); }
+    .anchor { font-family: monospace; font-size: 0.85rem; background: #090d16; padding: 6px 10px; border-radius: 6px; color: var(--muted); margin-top: 10px; display: inline-block; }
+    .mermaid-box { background: #090d16; border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-top: 12px; overflow-x: auto; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Mermaid Manager (MermaidApp Studio)</h1>
+    <p class="subtitle">Offline draw.io + two-way visual Mermaid suite for Windows — plain-English map of intentions, architecture, decisions, and landmines.</p>
+  </header>
+
+  <div class="tabs">
+    <button class="tab-btn active" onclick="showTab('intent', this)">1. My Intent & Features</button>
+    <button class="tab-btn" onclick="showTab('arch', this)">2. Visual Architecture</button>
+    <button class="tab-btn" onclick="showTab('decisions', this)">3. Decisions & What Failed</button>
+    <button class="tab-btn" onclick="showTab('traps', this)">4. Landmines (Do Not Touch)</button>
+  </div>
+
+  <!-- TAB 1: FEATURES & INTENT -->
+  <section id="intent" class="tab-panel active">
+    <div class="card">
+      <div class="card-header"><span class="card-title">[FEATURE: Two-Way Visual Mermaid Editor]</span><span class="badge badge-agent">Active Feature</span></div>
+      <div class="summary">Drag nodes, edges and subgroups visually; the Mermaid source syncs both ways with the draw.io canvas.</div>
+      <p><strong>User Intention:</strong> Every button responds instantly, a starter flowchart greets you, and a built-in help panel teaches the workflow.</p>
+      <div class="anchor">Code Anchor: mermaid-visual-editor/components/Canvas.tsx &rarr; CanvasInner · TopToolbar.tsx &rarr; TopToolbar · HelpPanel.tsx &rarr; HelpPanel</div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">[FEATURE: Universal Code-to-Diagram Studio]</span><span class="badge badge-agent">Active Feature</span></div>
+      <div class="summary">Paste any diagram code — 22+ syntaxes auto-detected, rendered live, broken Mermaid repaired with an explained one-click fix.</div>
+      <p><strong>User Intention:</strong> Auto-Fix must say what it repaired in plain English and never rewrite working code blindly (sequence/class diagrams pass through untouched).</p>
+      <div class="anchor">Code Anchor: plugins/mermaid-visual-editor.js &rarr; openUniversalStudio · renderCurrentCode · autoFixSyntaxDetailed</div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">[FEATURE: Diagrams and Folders Workspace Hub]</span><span class="badge badge-agent">Active Feature</span></div>
+      <div class="summary">Folder tree with live-preview cards, favorites, a default save folder, plus real PC folders holding your .mmd/.md diagrams.</div>
+      <p><strong>User Intention:</strong> All confirmations through in-app dialogs; PC folders stay authorized across launches; removing a folder never deletes your files.</p>
+      <div class="anchor">Code Anchor: plugins/mermaid-visual-editor.js &rarr; openDiagramsHub · addDiskFolder · getDefaultFolderId · inAppDialog</div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">[FEATURE: Electron Disk Access over IPC]</span><span class="badge badge-agent">Active Feature</span></div>
+      <div class="summary">Four security-screened IPC actions give the hub real read/write power only inside folders you authorized through the native picker.</div>
+      <p><strong>User Intention:</strong> Grants persist across launches; traversal, reserved device names, wrong extensions and oversized content are refused.</p>
+      <div class="anchor">Code Anchor: src/main/electron.js &rarr; mermaidAuthFolder · mermaidContainedChild · reqMermaidName</div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">[FEATURE: Portable Executable and Cloud Builds]</span><span class="badge badge-agent">Active Feature</span></div>
+      <div class="summary">One portable .exe — built locally on demand or in the cloud by a tag-triggered GitHub Actions workflow.</div>
+      <p><strong>User Intention:</strong> No installers, no signing for personal builds, no binaries in Git — GitHub Releases is the archive.</p>
+      <div class="anchor">Code Anchor: .github/workflows/build.yml &rarr; build-portable · scripts/sync-visual-editor.cjs</div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">[WISHLIST: Generate AI Panel]</span><span class="badge badge-wish">Planned</span></div>
+      <div class="summary">Describe a diagram in words; a model picker (DeepSeek, Gemini…) via harness CLIs or direct APIs writes the Mermaid into the Studio.</div>
+      <p><strong>User Intention:</strong> Deferred by the user — will attach to the toolbar through injectNativeToolbarButtons and feed openUniversalStudio.</p>
+      <div class="anchor">Target: plugins/mermaid-visual-editor.js &rarr; injectNativeToolbarButtons</div>
+    </div>
+  </section>
+
+  <!-- TAB 2: ARCHITECTURE -->
+  <section id="arch" class="tab-panel">
+    <div class="card">
+      <div class="card-header"><span class="card-title">System Flow & Architecture Map</span></div>
+      <div class="summary">How draw.io Desktop, the injected plugin, the React visual editor, and blessed disk folders talk to each other.</div>
+      <div class="mermaid-box">
+        <pre class="mermaid">
+flowchart TB
+    subgraph Host["draw.io Desktop Host (Electron 44)"]
+        MAIN["Main Process electron.js"]
+        WEBAPP["draw.io Webapp (mxGraph)"]
+        PLUGIN["Mermaid Studio Plugin"]
+        WEBAPP --> PLUGIN
+    end
+    subgraph Editor["2-Way Visual Editor (Next.js)"]
+        RF["React Flow + Zustand"]
+        SER["parser.ts / serializer.ts"]
+        RF --> SER
+    end
+    subgraph Storage["Persistence"]
+        LS[("localStorage workspace")]
+        DISK[("Blessed PC folders")]
+    end
+    USER("User") --> WEBAPP
+    PLUGIN -->|"postMessage bridge"| RF
+    PLUGIN --> LS
+    PLUGIN -->|"mermaid IPC actions"| MAIN
+    MAIN -->|"realpath + blessed checks"| DISK
+        </pre>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">Two-Way Bridge Sequence</span></div>
+      <div class="summary">The four postMessage types that keep the canvas and the Mermaid text in lockstep.</div>
+      <div class="mermaid-box">
+        <pre class="mermaid">
+sequenceDiagram
+    participant U as User
+    participant P as Plugin (host)
+    participant E as Editor iframe
+    U->>P: Open 2-Way Editor
+    P->>E: LOAD_MERMAID
+    U->>E: Drag / connect
+    U->>P: Apply to Canvas
+    P->>E: GET_MERMAID
+    E->>P: MERMAID_SYNC (syntax)
+        </pre>
+      </div>
+      <div class="anchor">Code Anchor: plugins/mermaid-visual-editor.js &rarr; openVisualMermaidEditor · app/page.tsx &rarr; handleMessage</div>
+    </div>
+  </section>
+
+  <!-- TAB 3: DECISIONS & PIVOTS -->
+  <section id="decisions" class="tab-panel">
+    <div class="card">
+      <div class="card-header"><span class="card-title">[DECISION: Atomic Editor Bundle Sync]</span><span class="badge badge-agent">DECIDED BY: AGENT - Approved by Human</span></div>
+      <div class="summary">Deploy the editor via stage-and-swap sync script, replacing a hand-copy that left buttons dead.</div>
+      <div class="mermaid-box">
+        <pre class="mermaid">
+flowchart LR
+    subgraph Failed["❌ Old Approach (Failed)"]
+        A1[Hand-copy + relative URLs] --> A2[Turbopack never boots → dead UI]
+    end
+    subgraph Active["✅ Current Approach (Works)"]
+        B1[Atomic swap, absolute /_next/] --> B2[Hydrated canvas, all buttons live]
+    end
+        </pre>
+      </div>
+      <div class="anchor">Code Anchor: scripts/sync-visual-editor.cjs · src/main/electron.js &rarr; onBeforeRequest</div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">[DECISION: In-App Dialogs Replace Native Prompt]</span><span class="badge badge-agent">DECIDED BY: AGENT - Approved by Human</span></div>
+      <div class="summary">Electron deletes window.prompt(); the hub now uses themed DOM dialogs for every question and confirmation.</div>
+      <p><strong>Why We Pivoted:</strong> Native prompt threw "prompt() is not supported" mid-handler, aborting folder creation; confirm() could not collect text. In-app dialogs also stop key events leaking into canvas shortcuts.</p>
+      <div class="anchor">Code Anchor: plugins/mermaid-visual-editor.js &rarr; inAppDialog · appPrompt · appConfirm</div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">[DECISION: Blessed-Path IPC for Disk Access]</span><span class="badge badge-agent">DECIDED BY: AGENT - Approved by Human</span></div>
+      <div class="summary">Real PC folders work through four main-process actions reusing draw.io's security model — not a blanket fs grant.</div>
+      <p><strong>Why We Pivoted:</strong> webkitdirectory kept no paths and could not write; a generic grant would let a renderer XSS read anything. Blessed folders + sanitized child paths + realpath containment keeps the boundary.</p>
+      <div class="anchor">Code Anchor: src/main/electron.js &rarr; mermaidAuthFolder · mermaidContainedChild · reqMermaidName</div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">[DECISION: PolyForm Noncommercial License]</span><span class="badge badge-human">DECIDED BY: HUMAN</span></div>
+      <div class="summary">Our code is PolyForm Noncommercial 1.0.0; upstream MIT/Apache/GPL credits live separately in THIRD_PARTY_NOTICES.md.</div>
+      <div class="anchor">Code Anchor: LICENSE · THIRD_PARTY_NOTICES.md</div>
+    </div>
+  </section>
+
+  <!-- TAB 4: LANDMINES / TRAPS -->
+  <section id="traps" class="tab-panel">
+    <div class="card">
+      <div class="card-header"><span class="card-title">[TRAP: Config JSON BOM Breaks Blessed Paths]</span><span class="badge badge-trap">DO NOT TOUCH</span></div>
+      <div class="summary">Never write %APPDATA%\draw.io\config.json with a PowerShell-5.1 UTF-8 BOM — the store fails to parse and every folder access reports "path not authorised".</div>
+      <p><strong>What Breaks If You Touch It:</strong> electron-store silently loads nothing; blessedPaths is empty; the security layer correctly refuses all folders. Write BOM-less with UTF8Encoding($false).</p>
+      <div class="anchor">Protected Anchor: src/main/electron.js &rarr; BLESSED_PATHS_KEY store init</div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">[TRAP: Visual Editor Hydration Needs Absolute /_next/ URLs]</span><span class="badge badge-trap">DO NOT TOUCH</span></div>
+      <div class="summary">Never hand-copy the editor build or rewrite /_next/ to relative paths — Turbopack never boots and every button goes dead.</div>
+      <p><strong>What Breaks If You Touch It:</strong> React never mounts; the UI renders as a static shell ignoring all clicks. Always deploy via scripts/sync-visual-editor.cjs.</p>
+      <div class="anchor">Protected Anchor: scripts/sync-visual-editor.cjs · src/main/electron.js &rarr; /_next/ redirect</div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">[TRAP: Electron Removes Prompt and Confirm]</span><span class="badge badge-trap">DO NOT TOUCH</span></div>
+      <div class="summary">Never add new prompt()/confirm() calls in the renderer — the throw aborts the whole click handler silently.</div>
+      <p><strong>What Breaks If You Touch It:</strong> Storage never updates and the UI appears simply broken behind an opaque error dialog. Use appPrompt/appConfirm.</p>
+      <div class="anchor">Protected Anchor: plugins/mermaid-visual-editor.js &rarr; inAppDialog</div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">[TRAP: Plugin Idempotency Guard Is Window-Global]</span><span class="badge badge-trap">DO NOT TOUCH</span></div>
+      <div class="summary">Never move __mermaidStudioPluginInitialized into a closure — draw.io loads the plugin from multiple bootstraps and palettes would duplicate.</div>
+      <p><strong>What Breaks If You Touch It:</strong> Sidebar palettes and toolbar buttons register two or three times.</p>
+      <div class="anchor">Protected Anchor: plugins/mermaid-visual-editor.js &rarr; initMermaidStudioPlugin · injectNativeToolbarButtons</div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">[TRAP: CSP / base-uri Interactions With the Iframe]</span><span class="badge badge-trap">DO NOT TOUCH</span></div>
+      <div class="summary">Never loosen the CSP or inject base elements to "fix" asset loading — the sanctioned path is the electron.js /_next/ redirect.</div>
+      <p><strong>What Breaks If You Touch It:</strong> The strictest policy wins; weakening it exposes the whole editor, and base-tag experiments silently re-route every relative URL.</p>
+      <div class="anchor">Protected Anchor: src/main/electron.js &rarr; onHeadersReceived · onBeforeRequest</div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">[TRAP: ELECTRON_RUN_AS_NODE Leaks Into Verification Spawns]</span><span class="badge badge-trap">DO NOT TOUCH</span></div>
+      <div class="summary">Node-launched Electron must always strip ELECTRON_RUN_AS_NODE or it starts as a plain REPL — no app, no CDP, probes hang.</div>
+      <p><strong>What Breaks If You Touch It:</strong> "app page target never appeared" errors that look like app bugs are actually environment leaks.</p>
+      <div class="anchor">Protected Anchor: scripts/verify-ipc-integration.mjs &rarr; childEnv · scripts/verify-packaged-exe.mjs</div>
+    </div>
+  </section>
+
+  <script>
+    function showTab(id, btn) {
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+      btn.classList.add('active');
+    }
+  </script>
+</body>
+</html>
