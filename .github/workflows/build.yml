@@ -1,0 +1,84 @@
+name: Build Portable EXE
+
+# Tag-triggered cloud build: push a version tag (e.g. v32.6.1) and GitHub Actions
+# builds the portable Windows .exe, uploads it as a run artifact, and attaches it
+# to the matching GitHub Release. Also runnable by hand (workflow_dispatch) to
+# verify the build without publishing a release.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: portable-exe-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: drawio-desktop
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: drawio-desktop/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Sync version and disable self-update
+        # drawio/VERSION is the single source of truth for the app version.
+        # disableUpdate keeps the official draw.io auto-updater from replacing
+        # this custom build.
+        run: node sync.cjs disableUpdate
+
+      - name: Check tag against built version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $appVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $tagVersion = '${{ github.ref_name }}'.TrimStart('v')
+          Write-Host "Built app version: $appVersion"
+          Write-Host "Triggering tag:    ${{ github.ref_name }}"
+          if ($appVersion -ne $tagVersion) {
+            Write-Host "::warning::Tag ${{ github.ref_name }} does not match built version $appVersion"
+          }
+
+      - name: Build portable exe
+        env:
+          DRAWIO_UNSIGNED: 'true'
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npx electron-builder --config electron-builder-win.json --publish never
+
+      - name: Show built artifacts
+        shell: pwsh
+        run: Get-ChildItem ../releases -Filter *.exe | Select-Object Name, @{n='MB';e={[math]::Round($_.Length/1MB,1)}}
+
+      - name: Upload portable exe as workflow artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: mermaid-manager-portable-exe
+          path: releases/*.exe
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Attach portable exe to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: releases/*.exe
+          generate_release_notes: true
+          fail_on_unmatched_files: true

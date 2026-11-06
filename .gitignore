@@ -1,9 +1,31 @@
+# --- Dependencies -------------------------------------------------------
 node_modules/
-dist/
-win-unpacked/
-*.nsis.7z
+.pnpm-store/
+
+# --- Build and packaging outputs ---------------------------------------
+/dist/
+/win-unpacked/
+/releases/
+/out/
 .next/
 .cache/
+*.nsis.7z
+*.blockmap
+latest.yml
+
+# --- Logs and local scratch --------------------------------------------
+*.log
 update_toolbar.js
-releases/
-resources/
+Thumbs.db
+.DS_Store
+
+# --- Secrets ------------------------------------------------------------
+.env
+.env.*
+!.env.example
+
+# --- Third-party clones (re-cloned on demand, not part of the app) ------
+/resources/
+
+# --- Agent-local settings ----------------------------------------------
+.claude/settings.local.json
