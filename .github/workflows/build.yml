@@ -19,7 +19,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
+  build-portable:
     runs-on: windows-latest
     defaults:
       run:
