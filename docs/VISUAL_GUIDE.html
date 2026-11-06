@@ -95,10 +95,10 @@
       <div class="anchor">Code Anchor: src/main/electron.js &rarr; mermaidAuthFolder · mermaidContainedChild · reqMermaidName</div>
     </div>
     <div class="card">
-      <div class="card-header"><span class="card-title">[FEATURE: Portable Executable and Cloud Builds]</span><span class="badge badge-agent">Active Feature</span></div>
-      <div class="summary">One portable .exe — built locally on demand or in the cloud by a tag-triggered GitHub Actions workflow.</div>
-      <p><strong>User Intention:</strong> No installers, no signing for personal builds, no binaries in Git — GitHub Releases is the archive.</p>
-      <div class="anchor">Code Anchor: .github/workflows/build.yml &rarr; build-portable · scripts/sync-visual-editor.cjs</div>
+      <div class="card-header"><span class="card-title">[FEATURE: Portable EXE, Installer and Auto-Versioned Releases]</span><span class="badge badge-agent">Active Feature</span></div>
+      <div class="summary">Every release carries two downloads — a no-install portable .exe and a per-user Windows installer — built in the cloud with an automatically bumped version tag.</div>
+      <p><strong>User Intention:</strong> No manual versioning and no local build: an app-code push to master releases both files; the installer needs no admin rights and creates shortcuts.</p>
+      <div class="anchor">Code Anchor: .github/workflows/build.yml &rarr; Work out the release version · electron-builder-win.json &rarr; win.target (portable + nsis)</div>
     </div>
     <div class="card">
       <div class="card-header"><span class="card-title">[WISHLIST: Generate AI Panel]</span><span class="badge badge-wish">Planned</span></div>
@@ -200,6 +200,12 @@ flowchart LR
       <div class="summary">Three nested repos became one repo, so a GitHub Actions runner can check out the whole app and build the portable exe on a version tag.</div>
       <p><strong>Why We Pivoted:</strong> the old root repo held only gitlinks with no .gitmodules, so a cloud runner would get two empty folders. Real submodules would mean three public repos and three pushes; flattening needs one checkout. Nested history is kept in a local backup.</p>
       <div class="anchor">Code Anchor: .gitignore · .gitattributes · .github/workflows/build.yml &rarr; build-portable</div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">[DECISION: Release Tag Is the Version Source of Truth]</span><span class="badge badge-agent">DECIDED BY: AGENT</span></div>
+      <div class="summary">The version is computed from the newest tag (next patch), stamped into the app, and published with its own tag — no manual version bookkeeping.</div>
+      <p><strong>Why We Pivoted:</strong> sync.cjs overwrote package.json from drawio/VERSION, so a pushed tag could never change the built version. Now an app-code push to master auto-releases both the portable build and the installer; docs-only pushes are filtered out.</p>
+      <div class="anchor">Code Anchor: .github/workflows/build.yml &rarr; Work out the release version · electron-builder-win.json &rarr; nsis</div>
     </div>
   </section>
 

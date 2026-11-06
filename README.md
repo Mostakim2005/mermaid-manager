@@ -1,6 +1,6 @@
 # MermaidApp Studio (draw.io + Visual Two-Way Drag & Drop Mermaid)
 
-[![Build Portable EXE](https://github.com/Mostakim2005/mermaid-manager/actions/workflows/build.yml/badge.svg)](https://github.com/Mostakim2005/mermaid-manager/actions/workflows/build.yml)
+[![Build Portable + Installer](https://github.com/Mostakim2005/mermaid-manager/actions/workflows/build.yml/badge.svg)](https://github.com/Mostakim2005/mermaid-manager/actions/workflows/build.yml)
 
 **MermaidApp Studio** is a completely offline, zero-subscription desktop diagramming suite for Windows. It integrates the power of **draw.io Desktop** with the **mermaid-visual-editor** (React Flow + Mermaid AST), enabling true two-way visual drag-and-drop diagramming alongside comprehensive multi-domain visualization tools.
 
@@ -21,27 +21,28 @@
    * **Mind Maps**: Central concept nodes, organic curved connectors, and topic pills.
    * **Cloud Architecture**: AWS, Azure, Google Cloud (GCP), Kubernetes, Cisco, and C4 Model shapes.
    * **Infographics & Flows**: KPI statistics cards, chevron process flows, comparison boards, and timeline funnels.
-3. **100% Free & Local (MIT / Apache 2.0 / GPLv3)**:
+3. **100% Free for Personal Use (PolyForm Noncommercial; upstream MIT / Apache 2.0 / GPLv3)**:
    * No subscription fees, no online account requirement, and zero telemetry.
 4. **Vector & Raster Exports**:
    * Export to scalable **SVG** (with embedded editable diagram data), crisp **PNG** (transparent backgrounds, custom DPI), and vectorized **PDF**.
-5. **Portable Executable (built in the cloud)**:
-   * Standalone single-file binary attached to [GitHub Releases](https://github.com/Mostakim2005/mermaid-manager/releases) — run immediately without installation.
-   * Pushing a `v*` tag builds it automatically on GitHub Actions; no local build toolchain needed.
+5. **Portable build and Windows installer (built in the cloud)**:
+   * Every release ships two files: `MermaidApp-draw.io-v<version>-Setup.exe` (installer with Start Menu/Desktop shortcuts) and `MermaidApp-draw.io-v<version>-Portable.exe` (run immediately, no installation).
+   * Attached to [GitHub Releases](https://github.com/Mostakim2005/mermaid-manager/releases); no local build toolchain needed.
 
 ---
 
 ## Quick Start
 
-### Download the portable application
+### Install the application
 1. Open the [latest release](https://github.com/Mostakim2005/mermaid-manager/releases).
-2. Download `MermaidApp-draw.io-v32.6.1-Portable.exe`.
-3. Double-click it — no installer, no account, no admin rights.
+2. Download `MermaidApp-draw.io-v<version>-Setup.exe` and run it (no admin rights needed; it installs for your user account).
+3. Or download `MermaidApp-draw.io-v<version>-Portable.exe` and double-click it — nothing is installed.
 
-### Build the portable exe in the cloud
-1. Push a version tag (for example `git tag v32.6.1 && git push origin v32.6.1`).
-2. The **Build Portable EXE** workflow compiles it on `windows-latest`, uploads it as a run artifact, and attaches it to the matching GitHub Release.
-3. The tag version must match `drawio-desktop/drawio/VERSION`; the workflow warns if they differ.
+### How releases are made automatically
+1. Every push to `master` that changes app code triggers the **Build Portable + Installer** workflow.
+2. The version is bumped automatically (next patch after the newest tag) and stamped into the app; the workflow creates the tag and publishes the GitHub Release with both files.
+3. Pushing a `v*` tag yourself rebuilds exactly that version; a manual run can take an explicit version too.
+4. `drawio-desktop/drawio/VERSION` is only upstream's reference version — the release tag is the source of truth.
 
 ### Using the Visual Drag-and-Drop Editor
 1. In draw.io, click the **⚡ Mermaid Visual** button on the toolbar (or navigate to `Arrange > Insert > Advanced > Visual Mermaid Editor`).
@@ -58,12 +59,12 @@ One Git repository, no submodules. Dependency folders, build outputs and the pac
 
 ```
 mermaid-manager/
-├── .github/workflows/build.yml        # tag-triggered portable-exe cloud build
+├── .github/workflows/build.yml        # auto-versioned portable + installer release build
 ├── drawio-desktop/                    # draw.io desktop source & Electron harness
 │   ├── drawio/src/main/webapp/
 │   │   ├── plugins/mermaid-visual-editor.js   # Host integration plugin
 │   │   └── mermaid-visual-editor/             # Bundled React Flow web client
-│   └── electron-builder-win.json      # Portable exe packaging config
+│   └── electron-builder-win.json      # portable + installer packaging config
 ├── mermaid-visual-editor/             # Source for the visual drag & drop component
 ├── docs/                              # PIA documentation + visual dashboard
 ├── scripts/                           # bundle sync + verification scripts

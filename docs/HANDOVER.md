@@ -120,10 +120,11 @@ cd drawio-desktop; npm run sync; $env:DRAWIO_UNSIGNED='true'; npx electron-build
 - One repo now: commit `drawio-desktop/`, `drawio-desktop/drawio/` and
   `mermaid-visual-editor/` together at the root. The old nested `.git` folders are
   backed up in `..\MermaidApp-git-backup\`; do not re-add them as submodules.
-- Cloud build: push a `v*` tag (e.g. `v32.6.1`) to
-  <https://github.com/Mostakim2005/mermaid-manager>; `.github/workflows/build.yml`
-  builds the portable exe on `windows-latest`, uploads it as a run artifact, and
-  attaches it to the GitHub Release.
+- Cloud build: `.github/workflows/build.yml` publishes a release on every app-code
+  push to `master` at <https://github.com/Mostakim2005/mermaid-manager>. It bumps the
+  version from the newest tag, stamps it into `package.json`, builds BOTH
+  `-Portable.exe` and `-Setup.exe` on `windows-latest`, and attaches them to the
+  GitHub Release. A pushed `v*` tag rebuilds that exact version.
 
 ## Git map for this session's changes
 

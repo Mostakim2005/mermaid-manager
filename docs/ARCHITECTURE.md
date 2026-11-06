@@ -127,32 +127,34 @@ sequenceDiagram
 * **Editor unit tests:** `node --test mermaid-visual-editor/lib/fileio.test.ts mermaid-visual-editor/lib/serializer.test.ts mermaid-visual-editor/lib/store.test.ts`
 * **End-to-end app regression (real Electron over CDP):** `node scripts/verify-ipc-integration.mjs <drawio-desktop path>` — asserts hydration, hub dialogs, IPC round-trip, and security refusals
 * **Packaged exe regression:** `node scripts/verify-packaged-exe.mjs <releases path>`
-* **Portable exe packaging:** `cd drawio-desktop; node ./sync.cjs; $env:DRAWIO_UNSIGNED='true'; npx electron-builder --config electron-builder-win.json --publish never`
+* **Portable + installer packaging:** `cd drawio-desktop; node ./sync.cjs; $env:DRAWIO_UNSIGNED='true'; npx electron-builder --config electron-builder-win.json --publish never` (produces both `-Portable.exe` and `-Setup.exe`)
 
 ## 5. Repository, Licensing & Cloud Build
 
-### [SUBSYSTEM: Single-Repo Source and Tag-Triggered Cloud Build] | Aliases: GitHub Actions, portable exe, release, flattened repo, gitlinks
-> **1-Line Summary:** The whole app lives in one Git repository (no submodules); pushing a `v*` tag makes GitHub Actions build the portable `.exe` on `windows-latest` and attach it to the GitHub Release.
+### [SUBSYSTEM: Single-Repo Source with Auto-Versioned Cloud Releases] | Aliases: GitHub Actions, portable exe, installer, auto tag, release, flattened repo
+> **1-Line Summary:** One Git repository (no submodules); every app-code push to `master` auto-bumps the version, creates the tag, and publishes both the portable `.exe` and the Windows installer from `windows-latest`.
 
 * **Repository:** <https://github.com/Mostakim2005/mermaid-manager> (default branch `master`).
 * **Why flattened:** the old root repo stored `drawio-desktop/` and `mermaid-visual-editor/` only as gitlinks and had no `.gitmodules`, so a cloud runner could never check them out. Both nested repos (and `drawio-desktop/drawio`, upstream's submodule) are now ordinary source directories. The nested `.git` folders were preserved in `..\MermaidApp-git-backup\` on the build PC.
 * **Deliberately not in Git:** `node_modules/`, `releases/`, `dist/`, `win-unpacked/`, `.next/`, `out/`, `resources/` (cloned companion tools), logs and `.env` files.
-* **Version rule:** the tag must equal `drawio-desktop/drawio/VERSION` (currently `32.6.1`); the workflow only warns when they differ.
+* **Version rule (release tag is the source of truth):** on a push to `master` the workflow takes the newest `v*` tag, compares it with `drawio/VERSION`, and uses the next patch (or `drawio/VERSION` when that is newer). It stamps that number into `package.json` after `sync.cjs`, builds, and lets the release create the tag. Pushing a `v*` tag rebuilds that exact version; `workflow_dispatch` can take an explicit version.
+* **Two artifacts per release:** `MermaidApp-draw.io-v<version>-Portable.exe` (no install) and `MermaidApp-draw.io-v<version>-Setup.exe` (per-user NSIS wizard, no admin rights, Start Menu + Desktop shortcuts, optional install folder).
 * **Licensing:** root `LICENSE` is PolyForm Noncommercial 1.0.0 for MermaidApp's original code; vendored `drawio-desktop/` stays GPL-3.0-only, `drawio-desktop/drawio/` Apache-2.0, `mermaid-visual-editor/` MIT. All credits are in `THIRD_PARTY_NOTICES.md`.
 
 ```mermaid
 flowchart LR
-    TAG["git push tag v32.6.1"] --> CI["GitHub Actions<br/>windows-latest"]
-    CI --> INSTALL["npm ci<br/>drawio-desktop"]
-    INSTALL --> SYNC["node sync.cjs disableUpdate<br/>stamps drawio/VERSION"]
-    SYNC --> PACK["electron-builder<br/>portable target"]
-    PACK --> ART["Run artifact<br/>mermaid-manager-portable-exe"]
-    PACK --> REL["GitHub Release asset<br/>MermaidApp-draw.io-v32.6.1-Portable.exe"]
+    PUSH["push to master<br/>(app code changed)"] --> VER["work out version<br/>newest tag + 1 patch"]
+    VER --> STAMP["stamp package.json"]
+    STAMP --> BUILD["electron-builder<br/>portable + nsis"]
+    BUILD --> PORT["...-Portable.exe"]
+    BUILD --> SETUP["...-Setup.exe"]
+    PORT --> REL["GitHub Release<br/>creates tag vX.Y.Z"]
+    SETUP --> REL
 ```
 
 * **Code Anchors (Grep Targets):**
-  * `.github/workflows/build.yml` -> `build-portable`, `Attach portable exe to GitHub Release`
-  * `drawio-desktop/electron-builder-win.json` -> `directories.output`, `portable.artifactName`
+  * `.github/workflows/build.yml` -> `Work out the release version`, `Stamp the release version into package.json`, `Publish GitHub Release`
+  * `drawio-desktop/electron-builder-win.json` -> `win.target` (`portable`, `nsis`), `nsis.artifactName`
   * `drawio-desktop/sync.cjs` -> `disableUpdate` writer
 
 ## 6. Recipes: How to Add New Things Safely

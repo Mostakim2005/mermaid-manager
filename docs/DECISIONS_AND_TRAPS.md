@@ -76,6 +76,18 @@ flowchart LR
   * `.gitignore`, `.gitattributes`
   * `.github/workflows/build.yml`
 
+### [DECISION: Release Tag Is the Version Source of Truth] | Aliases: auto version, version bump, tag, package.json, release
+> **1-Line Summary:** The workflow works out the version from the newest `v*` tag (auto-bumping the patch), stamps it into `package.json` after `sync.cjs`, and lets the release create the tag, so versioning is never manual.
+* **Decision Maker:** `[DECIDED BY: AGENT]`
+* **Original User Intention:** "Git versioning is always updated, like tag versioning, if necessary."
+* **Options Considered:**
+  * **Option A (Rejected):** keep `drawio/VERSION` as the built version and require a matching manual tag. `sync.cjs` overwrites `package.json` from that file, so a pushed tag could never change the built version, and every release needed hand bookkeeping.
+  * **Option B (Chosen):** derive the next version from the newest tag (`newest patch + 1`, or `drawio/VERSION` when upstream jumps ahead), stamp it into `package.json`, and publish the release with that tag. An app-code push to `master` releases automatically; docs-only pushes are filtered out.
+* **Consequence:** the repo's `package.json` keeps drawio's upstream number between builds; the built app and the release use the tag version. A pushed `v*` tag still rebuilds exactly that version, and `workflow_dispatch` can take an explicit one.
+* **Code Anchors (Grep Targets):**
+  * `.github/workflows/build.yml` -> `Work out the release version`, `Stamp the release version into package.json`
+  * `drawio-desktop/electron-builder-win.json` -> `nsis.artifactName`
+
 ---
 
 ## 2. Do-Not-Touch Engineering Landmines (Traps)

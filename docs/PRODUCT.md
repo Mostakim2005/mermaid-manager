@@ -52,13 +52,14 @@
 * **Code Anchors (Grep Targets):**
   * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js` -> `injectNativeToolbarButtons`, `setupSidePanelCollapsers`, `injectCustomStyles`
 
-### [FEATURE: Portable Executable and Cloud Builds] | Aliases: portable exe, release, GitHub Actions, cloud build
-> **1-Line Summary:** A single unsigned portable `.exe` built locally on demand and, by default, built in the cloud by a tag-triggered GitHub Actions workflow that attaches it to GitHub Releases.
-* **User Intention (Non-Negotiable):** No installers unless asked; no code signing for personal builds; binaries never committed to Git.
-* **Repository Rule:** Public repo <https://github.com/Mostakim2005/mermaid-manager>; the tag (`v32.6.1`) must match `drawio-desktop/drawio/VERSION` so the release name and the built file name agree.
+### [FEATURE: Portable EXE, Windows Installer and Auto-Versioned Cloud Releases] | Aliases: portable exe, installer, setup, release, GitHub Actions, cloud build, version tag
+> **1-Line Summary:** Every release ships two unsigned files — a no-install portable `.exe` and a per-user Windows installer — built automatically in the cloud with an auto-bumped version tag.
+* **User Intention (Non-Negotiable):** Both download styles must exist on every release; the installer must work without admin rights and create Start Menu/Desktop shortcuts; no code signing for personal builds; binaries never committed to Git.
+* **Versioning Rule:** The release tag is the source of truth. A push to `master` that changes app code bumps the patch after the newest tag (or adopts `drawio/VERSION` if newer), stamps it into the app, creates the tag, and publishes the release. A pushed `v*` tag rebuilds exactly that version.
+* **Repository Rule:** Public repo <https://github.com/Mostakim2005/mermaid-manager>.
 * **Code Anchors (Grep Targets):**
-  * `.github/workflows/build.yml` -> `build-portable`
-  * `drawio-desktop/electron-builder-win.json` -> `portable.artifactName`
+  * `.github/workflows/build.yml` -> `Work out the release version`, `Stamp the release version into package.json`, `Publish GitHub Release`
+  * `drawio-desktop/electron-builder-win.json` -> `win.target` (`portable` + `nsis`), `nsis.artifactName`
   * `drawio-desktop/build/sign-trusted.mjs` -> personal-build skip
   * `scripts/sync-visual-editor.cjs` -> build + atomic bundle swap
   * `scripts/verify-ipc-integration.mjs` -> CDP end-to-end regression
