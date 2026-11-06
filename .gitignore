@@ -5,3 +5,5 @@ win-unpacked/
 .next/
 .cache/
 update_toolbar.js
+releases/
+resources/

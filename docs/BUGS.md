@@ -54,7 +54,7 @@
 
 ---
 
-### BUG-006: Duplicate Custom Sidebar Palettes (`Radar & Spider`, `Mind Maps`, `Infographics`) Appearing 2–3 Times
+### BUG-006: Duplicate Custom Sidebar Palettes (`Radar & Spider`, `Mind Maps`, `Infographics`) Appearing 2â€“3 Times
 * **Symptom**: In Screenshots 1 & 2, the left shape library sidebar repeated `Radar & Spider Diagrams`, `Mind Maps & Brainstorming`, and `Infographics & Flow Visualization` multiple times.
 * **Root Cause**: `plugins/mermaid-visual-editor.js` was loaded via `<script>` in `index.html`, `ElectronApp.js`, and `PostConfig.js`. Because `var pluginInitialized = false` was scoped to each IIFE closure instance rather than `window`, each script execution ran its own closure and registered the palettes again.
 * **Resolution Strategy**: Replaced closure-local `pluginInitialized` with a window-global `window.__mermaidStudioPluginInitialized` singleton guard and added `ui.sidebar._customMermaidPalettesAdded = true` before calling `sb.addPaletteFunctions`.
@@ -81,9 +81,75 @@
 * **Resolution Strategy**:
   1. Upgraded `mermaid-visual-editor/lib/parser.ts` to handle `flowchart`/`graph` (`TD|TB|LR|BT|RL`), `subgraph ID["Title"]`, `<br>` and HTML entity decoding, quote-aware `extractBalancedShape`, bidirectional labeled edges, and `@` shape annotations.
   2. Updated `components/Canvas.tsx` and `app/page.tsx` to pre-load an interactive starter flowchart when opened empty, enable left-click canvas panning (`panOnDrag={!drawingShape}`), and respond to `GET_MERMAID` with `MERMAID_SYNC`.
-  3. Added clear text labels (`+ Rect`, `+ Diamond`, `+ Circle`, `+ Stadium`, `⚡ Sync to Draw.io`) and Draw.io light-slate styling to `components/TopToolbar.tsx`.
+  3. Added clear text labels (`+ Rect`, `+ Diamond`, `+ Circle`, `+ Stadium`, `âš¡ Sync to Draw.io`) and Draw.io light-slate styling to `components/TopToolbar.tsx`.
 * **Code Anchors**:
   * `mermaid-visual-editor/lib/parser.ts:1-600`
   * `mermaid-visual-editor/components/Canvas.tsx:55-260`
   * `mermaid-visual-editor/components/TopToolbar.tsx:70-220`
   * `mermaid-visual-editor/app/page.tsx:25-110`
+
+---
+
+### BUG-009: 2-Way Visual Editor Rendered but Every Button Was Dead
+* **Symptom**: The window opened and drew its whole UI (toolbar, empty-state card, inspector), but `Add Starter Flowchart`, `+ Node`, `+ Add Shape`, `Import Code`, `Copy .mmd` and `Sync to Draw.io` did nothing. Only moving the window worked.
+* **Root Cause**: The bundled client never hydrated. Two separate defects combined:
+  1. `drawio/src/main/webapp/mermaid-visual-editor/` was a hand-copied snapshot whose `index.html` had its `/_next/` URLs rewritten to `./_next/` by an ad-hoc script, and whose chunk directory had accumulated files from different builds (88 chunks for 20 referenced). The Turbopack runtime derives its chunk base from `document.currentScript.src`; with relative URLs and a mixed tree it never ran, so `globalThis.TURBOPACK` stayed a bare `[]`, React never mounted, and every `onclick` was inert.
+  2. `electron.js:846-869` already redirects any `file://*_next*` request to `<codeUrl>mermaid-visual-editor/_next/`, which only works when the HTML keeps its **absolute** `/_next/` URLs.
+* **Resolution Strategy**:
+  1. Added `scripts/sync-visual-editor.cjs`, which builds the editor, validates that every referenced chunk exists, then stages and atomically swaps the destination directory (never copies over a live tree) and re-checks for stale chunks.
+  2. The script deliberately keeps `/_next/` absolute â€” rewriting to `./_next/` is what breaks hydration.
+* **Verification**: Headless Electron loads the webapp over `file://`; the iframe reports `hydrated: true`, 6 starter nodes, and 7 after clicking `+ Node`.
+* **Code Anchors**:
+  * `scripts/sync-visual-editor.cjs:1-70`
+  * `drawio-desktop/src/main/electron.js:846-869`
+
+---
+
+### BUG-010: "New Folder" Failed with `Uncaught Error: prompt() is not supported`
+* **Symptom**: Clicking **New Folder** in the Diagrams & Folders Workspace Hub raised an `Unknown error` dialog reading `Uncaught Error: prompt() is not supported.`, and no folder was created. Save-canvas, rename and delete actions were equally broken.
+* **Root Cause**: Electron removes `window.prompt()` from renderers. The hub used `prompt()` in four places and `confirm()` in three; a `prompt()` call throws, so the handler aborted before touching storage.
+* **Resolution Strategy**: Added DOM-based `inAppDialog()` / `appPrompt()` / `appConfirm()` helpers in the plugin and replaced every native `prompt()`/`confirm()` call site. The dialog is theme-aware, stops key events leaking into draw.io's canvas shortcuts, and supports Escape/Enter.
+* **Verification**: Headless Electron creates a folder named "Verified Folder" through the in-app dialog; `prompt() is not supported` no longer appears anywhere in the DOM.
+* **Code Anchors**:
+  * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js:107-230` (`inAppDialog`, `appPrompt`, `appConfirm`)
+
+---
+
+### BUG-011: Hub Folders Were Not On Disk and There Was No Default Save Location
+* **Symptom**: "New Folder" only created a `localStorage` label â€” nothing existed on the C: drive, existing `.md`/`.mmd` diagrams could not be browsed, and every save landed in a hardcoded "Personal" folder.
+* **Root Cause**: The workspace model had no notion of disk folders and no settings object; `folderId: 'personal'` was hardcoded at every save site.
+* **Resolution Strategy**:
+  1. Added `ðŸ–¿ Add PC folder` (native directory picker) which scans for `.mmd` files and `.md`/`.markdown` files containing ```` ```mermaid ```` blocks, and registers the directory as a hub folder (`kind: 'disk'`).
+  2. Added `ðŸ”„ Rescan` on disk folders, since the web runtime keeps no directory handle â€” the folder is re-picked and re-matched by relative path.
+  3. Added a `âš™ Default save folder` selector persisted in `workspace.settings.defaultFolderId`; all save paths now resolve through `getDefaultFolderId()`.
+* **Note**: Folders created in-app remain virtual (localStorage) by design â€” writing arbitrary files requires an Electron IPC grant. Disk folders are read-imported.
+* **Update (IPC implementation)**: Hub folders now read AND write real disk content. Four IPC actions were added to `electron.js` (`mermaidListFolder`, `mermaidReadFile`, `mermaidWriteFile`, `mermaidDeleteFile`): the folder must be one the user authorized through the native directory picker (`showOpenDialog` blesses it, persisted via electron-store), every child path is re-derived main-process-side from the blessed folder + a sanitized single-segment name, realpath-checked for containment (symlinks cannot escape), extension-allowlisted (`.mmd/.md/.markdown/.drawio`), Windows reserved device names rejected, and content size-capped at 5 MB. A native "Add PC folder" picker replaced the `webkitdirectory` workaround in Electron; the in-page picker remains as a non-Electron fallback. Verified end-to-end over CDP against the real app: blessed folder reads/writes/deletes work, traversal, `.exe` and `CON` names are refused, and the grant persists across launches.
+* **Code Anchors (IPC)**:
+  * `drawio-desktop/src/main/electron.js:4195-4260` (`mermaidAuthFolder`, `mermaidContainedChild`, `reqMermaidName`)
+  * `drawio-desktop/src/main/electron.js:4620-4700` (rendererReq cases)
+  * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js:1660-1705` (`isElectronHost`, `ipcRequest`, `pickDiskFolder`)
+  * `scripts/verify-ipc-integration.mjs` (CDP regression test)
+---
+
+### BUG-012: Contrast Inversion When Switching Light/Dark Themes
+* **Symptom**: In dark mode a chart's bars were almost the same near-black as the panel behind them, and the selected shape and the floating palette icons were unreadable. In the Studio, node labels could turn white on a light canvas.
+* **Root Cause**: `resolveLightDarkCss()` replaced `light-dark(a, b)` with a regex that split on the first comma â€” but draw.io emits `rgb(...)` values, which contain commas, so `light-dark(rgb(236, 236, 255), rgb(31, 32, 32))` was mangled. It also left `color-scheme` untouched, letting the browser re-resolve any surviving pair against the OS theme rather than the canvas being drawn.
+* **Resolution Strategy**: Rewrote the resolver to walk the argument list with paren-depth awareness (`splitLightDarkArgs`) and to pin `color-scheme` to the target canvas. Added `parseCssColor`, `relativeLuminance` and `contrastRatio` helpers for contrast checks.
+* **Verification**: A real draw.io render emits 11 `light-dark()` pairs per theme; after resolution both themes report 0 unresolved pairs and the expected light (`rgb(236,236,255)`, `rgb(51,51,51)`) / dark (`rgb(31,32,32)`, `rgb(204,204,204)`) values.
+* **Code Anchors**:
+  * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js:16-100` (`splitLightDarkArgs`, `resolveLightDarkCss`, `parseCssColor`, `contrastRatio`)
+
+---
+
+### BUG-013: Auto-Fix Rewrote Code Blindly and Could Not Say What It Did
+* **Symptom**: `ðŸ”§ Auto-Fix Syntax` / `Auto-Fix Now` reported "Applied syntax auto-fix rules" even when nothing changed, and its repairs were flowchart-only and regex-fragile: en-dash input produced `--->B`, unclosed brackets were left broken, and an unbalanced-quote pass could fight the bracket pass, making repeated clicks keep changing the code.
+* **Root Cause**: One monolithic `autoFixSyntax()` with no result reporting, no diagram-family awareness, and no idempotency guarantee.
+* **Resolution Strategy**:
+  1. Replaced it with `autoFixSyntaxDetailed()`, an ordered pipeline of small repair rules (`repairUnicode`, `repairArrows`, `repairUnquotedLabels`, `repairUnclosedBrackets`, `repairSubgraphs`, `repairUnbalancedQuotes`, `repairHeaderSpacing`, `repairCaseKeywords`, `repairEdgeLabels`) gated by `mermaidFamily()`.
+  2. Each rule only touches what it can prove is wrong and returns a human-readable note; `applyAutoFixAndReport()` shows the applied repairs in the status bar.
+  3. `autoFixSyntax()` remains as a thin compatibility shim for existing callers.
+* **Verification**: 17 cases (fencing, smart quotes/en-dashes, broken arrows, unquoted `()`/`:` labels, unclosed brackets, unclosed subgraphs, implicit headers, spaced edge labels, sequence/class passthrough) all produce stable, idempotent output.
+* **Code Anchors**:
+  * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js:527-760` (`autoFixSyntaxDetailed` and repair rules)
+
+
