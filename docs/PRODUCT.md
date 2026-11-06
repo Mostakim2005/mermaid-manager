@@ -55,6 +55,7 @@
 ### [FEATURE: Portable Executable and Cloud Builds] | Aliases: portable exe, release, GitHub Actions, cloud build
 > **1-Line Summary:** A single unsigned portable `.exe` built locally on demand and, by default, built in the cloud by a tag-triggered GitHub Actions workflow that attaches it to GitHub Releases.
 * **User Intention (Non-Negotiable):** No installers unless asked; no code signing for personal builds; binaries never committed to Git.
+* **Repository Rule:** Public repo <https://github.com/Mostakim2005/mermaid-manager>; the tag (`v32.6.1`) must match `drawio-desktop/drawio/VERSION` so the release name and the built file name agree.
 * **Code Anchors (Grep Targets):**
   * `.github/workflows/build.yml` -> `build-portable`
   * `drawio-desktop/electron-builder-win.json` -> `portable.artifactName`

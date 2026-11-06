@@ -64,6 +64,18 @@ flowchart LR
 * **Code Anchors (Grep Targets):**
   * `LICENSE`, `THIRD_PARTY_NOTICES.md`
 
+### [DECISION: One Flattened Repository for Cloud Builds] | Aliases: submodules, gitlinks, nested repos, checkout
+> **1-Line Summary:** The three nested repositories were flattened into one repository because a cloud runner cannot check out unpublished gitlinks, and the old root repo had no `.gitmodules` at all.
+* **Decision Maker:** `[DECIDED BY: AGENT]`
+* **Original User Intention:** Put the whole codebase on GitHub and have a tag build the portable `.exe` in the cloud.
+* **Options Considered:**
+  * **Option A (Rejected):** turn `drawio-desktop/` and `mermaid-visual-editor/` into real submodules and publish them as separate repos. Rejected because their custom commits would need three public repos, three push orders, and a workflow that authenticates a private-checkout chain — fragile for one person's project.
+  * **Option B (Chosen):** vendor every source directory into the root repo, delete the gitlink entries, and keep nested history in a local backup. One checkout gives the workflow everything it needs.
+* **Consequence:** upstream commit history for the two nested repos is no longer inside this repository (it is backed up locally); future changes are committed once, at the root.
+* **Code Anchors (Grep Targets):**
+  * `.gitignore`, `.gitattributes`
+  * `.github/workflows/build.yml`
+
 ---
 
 ## 2. Do-Not-Touch Engineering Landmines (Traps)

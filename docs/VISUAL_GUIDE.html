@@ -195,6 +195,12 @@ flowchart LR
       <div class="summary">Our code is PolyForm Noncommercial 1.0.0; upstream MIT/Apache/GPL credits live separately in THIRD_PARTY_NOTICES.md.</div>
       <div class="anchor">Code Anchor: LICENSE · THIRD_PARTY_NOTICES.md</div>
     </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">[DECISION: One Flattened Repository for Cloud Builds]</span><span class="badge badge-agent">DECIDED BY: AGENT</span></div>
+      <div class="summary">Three nested repos became one repo, so a GitHub Actions runner can check out the whole app and build the portable exe on a version tag.</div>
+      <p><strong>Why We Pivoted:</strong> the old root repo held only gitlinks with no .gitmodules, so a cloud runner would get two empty folders. Real submodules would mean three public repos and three pushes; flattening needs one checkout. Nested history is kept in a local backup.</p>
+      <div class="anchor">Code Anchor: .gitignore · .gitattributes · .github/workflows/build.yml &rarr; build-portable</div>
+    </div>
   </section>
 
   <!-- TAB 4: LANDMINES / TRAPS -->

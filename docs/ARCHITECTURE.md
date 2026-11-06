@@ -129,7 +129,33 @@ sequenceDiagram
 * **Packaged exe regression:** `node scripts/verify-packaged-exe.mjs <releases path>`
 * **Portable exe packaging:** `cd drawio-desktop; node ./sync.cjs; $env:DRAWIO_UNSIGNED='true'; npx electron-builder --config electron-builder-win.json --publish never`
 
-## 5. Recipes: How to Add New Things Safely
+## 5. Repository, Licensing & Cloud Build
+
+### [SUBSYSTEM: Single-Repo Source and Tag-Triggered Cloud Build] | Aliases: GitHub Actions, portable exe, release, flattened repo, gitlinks
+> **1-Line Summary:** The whole app lives in one Git repository (no submodules); pushing a `v*` tag makes GitHub Actions build the portable `.exe` on `windows-latest` and attach it to the GitHub Release.
+
+* **Repository:** <https://github.com/Mostakim2005/mermaid-manager> (default branch `master`).
+* **Why flattened:** the old root repo stored `drawio-desktop/` and `mermaid-visual-editor/` only as gitlinks and had no `.gitmodules`, so a cloud runner could never check them out. Both nested repos (and `drawio-desktop/drawio`, upstream's submodule) are now ordinary source directories. The nested `.git` folders were preserved in `..\MermaidApp-git-backup\` on the build PC.
+* **Deliberately not in Git:** `node_modules/`, `releases/`, `dist/`, `win-unpacked/`, `.next/`, `out/`, `resources/` (cloned companion tools), logs and `.env` files.
+* **Version rule:** the tag must equal `drawio-desktop/drawio/VERSION` (currently `32.6.1`); the workflow only warns when they differ.
+* **Licensing:** root `LICENSE` is PolyForm Noncommercial 1.0.0 for MermaidApp's original code; vendored `drawio-desktop/` stays GPL-3.0-only, `drawio-desktop/drawio/` Apache-2.0, `mermaid-visual-editor/` MIT. All credits are in `THIRD_PARTY_NOTICES.md`.
+
+```mermaid
+flowchart LR
+    TAG["git push tag v32.6.1"] --> CI["GitHub Actions<br/>windows-latest"]
+    CI --> INSTALL["npm ci<br/>drawio-desktop"]
+    INSTALL --> SYNC["node sync.cjs disableUpdate<br/>stamps drawio/VERSION"]
+    SYNC --> PACK["electron-builder<br/>portable target"]
+    PACK --> ART["Run artifact<br/>mermaid-manager-portable-exe"]
+    PACK --> REL["GitHub Release asset<br/>MermaidApp-draw.io-v32.6.1-Portable.exe"]
+```
+
+* **Code Anchors (Grep Targets):**
+  * `.github/workflows/build.yml` -> `build-portable`, `Attach portable exe to GitHub Release`
+  * `drawio-desktop/electron-builder-win.json` -> `directories.output`, `portable.artifactName`
+  * `drawio-desktop/sync.cjs` -> `disableUpdate` writer
+
+## 6. Recipes: How to Add New Things Safely
 
 * **To add a new toolbar button:** edit `plugins/mermaid-visual-editor.js` -> `injectNativeToolbarButtons` (use class `mermaid-tb-btn`; reuse `openUniversalStudio`/`openVisualMermaidEditor` for actions).
 * **To add a new diagram type to the Studio:** extend `detectDiagramType` with a new header regex, then add a render branch in `renderCurrentCode` (mirror the radar/infographic engines for custom SVG renderers).

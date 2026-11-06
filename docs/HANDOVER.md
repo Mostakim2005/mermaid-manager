@@ -13,7 +13,7 @@ Next.js/React-Flow "2-Way Visual Mermaid Editor", a Universal Code-to-Diagram
 Studio, and a Diagrams & Folders Workspace Hub — all injected by one plugin,
 `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js`.
 
-Repo layout (nested git repos, root tracks them as gitlinks):
+Repo layout (one flattened Git repo since 2026-11-06; no submodules):
 
 ```
 MermaidApp/                     root repo (docs/, scripts/)
@@ -117,8 +117,13 @@ cd drawio-desktop; npm run sync; $env:DRAWIO_UNSIGNED='true'; npx electron-build
   needs an electron-builder run to pick them up.
 - In-app-created (non-disk) hub folders remain virtual (localStorage) by design;
   disk folders are the on-disk surface.
-- Nested repos: `drawio-desktop` must be committed BEFORE the root (gitlink
-  update), and `drawio-desktop/drawio` (submodule) before `drawio-desktop`.
+- One repo now: commit `drawio-desktop/`, `drawio-desktop/drawio/` and
+  `mermaid-visual-editor/` together at the root. The old nested `.git` folders are
+  backed up in `..\MermaidApp-git-backup\`; do not re-add them as submodules.
+- Cloud build: push a `v*` tag (e.g. `v32.6.1`) to
+  <https://github.com/Mostakim2005/mermaid-manager>; `.github/workflows/build.yml`
+  builds the portable exe on `windows-latest`, uploads it as a run artifact, and
+  attaches it to the GitHub Release.
 
 ## Git map for this session's changes
 
