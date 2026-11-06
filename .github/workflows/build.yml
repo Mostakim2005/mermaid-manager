@@ -1,21 +1,38 @@
-name: Build Portable EXE
+name: Build Portable + Installer
 
-# Tag-triggered cloud build: push a version tag (e.g. v32.6.1) and GitHub Actions
-# builds the portable Windows .exe, uploads it as a run artifact, and attaches it
-# to the matching GitHub Release. Also runnable by hand (workflow_dispatch) to
-# verify the build without publishing a release.
+# Release pipeline.
+#
+#  * Push to master that changes app code  -> version is computed automatically
+#    (next patch after the newest v* tag, or drawio/VERSION when that is newer),
+#    the release creates its own tag, and both the portable .exe and the Windows
+#    installer are published.
+#  * Push a v* tag                        -> rebuilds exactly that version.
+#  * Run workflow_dispatch                -> optional explicit version; empty
+#    means auto-bump.
 
 on:
   push:
     tags:
       - 'v*'
+    branches:
+      - master
+    paths:
+      - 'drawio-desktop/**'
+      - 'mermaid-visual-editor/**'
+      - 'scripts/**'
+      - '.github/workflows/build.yml'
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Explicit version (e.g. 32.6.3). Leave empty to auto-bump.'
+        required: false
+        type: string
 
 permissions:
   contents: write
 
 concurrency:
-  group: portable-exe-${{ github.ref }}
+  group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -28,6 +45,47 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Work out the release version
+        shell: pwsh
+        env:
+          EXPLICIT_VERSION: ${{ github.event.inputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:GITHUB_REF_TYPE -eq 'tag') {
+            $version = $env:GITHUB_REF_NAME.TrimStart('v')
+            Write-Host "Version taken from tag: $version"
+          }
+          elseif ($env:EXPLICIT_VERSION) {
+            $version = $env:EXPLICIT_VERSION.TrimStart('v')
+            Write-Host "Version taken from input: $version"
+          }
+          else {
+            $base = (Get-Content drawio\VERSION -Raw).Trim()
+            $latestTag = git tag -l 'v*' --sort=-v:refname | Select-Object -First 1
+            Write-Host "Newest tag: '$latestTag' ; drawio/VERSION: $base"
+            if (-not $latestTag) {
+              $version = $base
+            }
+            else {
+              $latest = [version]($latestTag.TrimStart('v') -replace '[^0-9.].*$', '')
+              $baseVersion = [version]$base
+              if ($baseVersion -gt $latest) {
+                $version = $base
+              }
+              else {
+                $version = '{0}.{1}.{2}' -f $latest.Major, $latest.Minor, ($latest.Build + 1)
+              }
+            }
+          }
+          if ($version -notmatch '^\d+\.\d+\.\d+$') {
+            throw "Computed version '$version' is not MAJOR.MINOR.PATCH"
+          }
+          "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "RELEASE_TAG=v$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "Releasing $version (tag v$version)"
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -40,24 +98,20 @@ jobs:
         run: npm ci
 
       - name: Sync version and disable self-update
-        # drawio/VERSION is the single source of truth for the app version.
-        # disableUpdate keeps the official draw.io auto-updater from replacing
-        # this custom build.
+        # drawio/VERSION stays upstream's version; the release version is
+        # stamped from the computed tag in the next step. disableUpdate stops
+        # the official draw.io auto-updater from replacing this custom build.
         run: node sync.cjs disableUpdate
 
-      - name: Check tag against built version
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Stamp the release version into package.json
         shell: pwsh
         run: |
-          $appVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version
-          $tagVersion = '${{ github.ref_name }}'.TrimStart('v')
-          Write-Host "Built app version: $appVersion"
-          Write-Host "Triggering tag:    ${{ github.ref_name }}"
-          if ($appVersion -ne $tagVersion) {
-            Write-Host "::warning::Tag ${{ github.ref_name }} does not match built version $appVersion"
-          }
+          $pj = Get-Content package.json -Raw | ConvertFrom-Json
+          $pj.version = $env:APP_VERSION
+          $pj | ConvertTo-Json -Depth 20 | Set-Content package.json -Encoding utf8
+          Write-Host "package.json version: $((Get-Content package.json -Raw | ConvertFrom-Json).version)"
 
-      - name: Build portable exe
+      - name: Build portable exe and installer
         env:
           DRAWIO_UNSIGNED: 'true'
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
@@ -67,18 +121,26 @@ jobs:
         shell: pwsh
         run: Get-ChildItem ../releases -Filter *.exe | Select-Object Name, @{n='MB';e={[math]::Round($_.Length/1MB,1)}}
 
-      - name: Upload portable exe as workflow artifact
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v6
         with:
-          name: mermaid-manager-portable-exe
+          name: mermaid-manager-${{ env.RELEASE_TAG }}
           path: releases/*.exe
           if-no-files-found: error
           retention-days: 14
 
-      - name: Attach portable exe to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          target_commitish: ${{ github.sha }}
+          name: MermaidApp Studio ${{ env.APP_VERSION }}
+          body: |
+            MermaidApp Studio ${{ env.APP_VERSION }}
+
+            - `MermaidApp-draw.io-v${{ env.APP_VERSION }}-Setup.exe` — Windows installer
+            - `MermaidApp-draw.io-v${{ env.APP_VERSION }}-Portable.exe` — no-install portable build
+
+            Unsigned personal build; Windows may show a SmartScreen prompt.
           files: releases/*.exe
-          generate_release_notes: true
           fail_on_unmatched_files: true

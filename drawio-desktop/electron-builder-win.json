@@ -36,11 +36,28 @@
         "arch": [
           "x64"
         ]
+      },
+      {
+        "target": "nsis",
+        "arch": [
+          "x64"
+        ]
       }
     ]
   },
   "portable": {
     "artifactName": "MermaidApp-draw.io-v${version}-Portable.exe"
+  },
+  "nsis": {
+    "artifactName": "MermaidApp-draw.io-v${version}-Setup.exe",
+    "oneClick": false,
+    "perMachine": false,
+    "allowElevation": true,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "MermaidApp Studio",
+    "deleteAppDataOnUninstall": false
   },
   "afterPack": "build/fuses.mjs",
   "fileAssociations": [
