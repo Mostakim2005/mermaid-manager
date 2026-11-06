@@ -82,3 +82,4 @@ jobs:
           files: releases/*.exe
           generate_release_notes: true
           fail_on_unmatched_files: true
+# trigger-rescan
