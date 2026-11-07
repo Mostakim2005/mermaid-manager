@@ -65,6 +65,12 @@
   * `scripts/verify-ipc-integration.mjs` -> CDP end-to-end regression
   * `scripts/verify-packaged-exe.mjs` -> packaged-exe regression
 
+### [FEATURE: Deduplicated Spider-Radar & Infographic SVG Engines] | Aliases: spider chart, radar chart, KPI infographic, process funnel
+> **1-Line Summary:** Native vector SVG engines for 5/6/8-axis radar charts and KPI process cards that render directly into draw.io shapes with guarded single palette registration.
+* **User Intention (Non-Negotiable):** Quantitative spider/radar webs and infographic flows generate directly from DSL or preset templates without duplicating sidebar stencil palettes across reload cycles.
+* **Code Anchors (Grep Targets):**
+  * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js` -> `renderRadarSvg`, `renderInfographicSvg`, `sb.addPaletteFunctions`
+
 ## 3. Planned Features & App-Merge Wishlist
 
 ### [WISHLIST: Generate AI Panel] | Aliases: AI, DeepSeek, Gemini, model selector, CLI API

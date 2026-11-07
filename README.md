@@ -66,7 +66,8 @@ mermaid-manager/
 │   │   └── mermaid-visual-editor/             # Bundled React Flow web client
 │   └── electron-builder-win.json      # portable + installer packaging config
 ├── mermaid-visual-editor/             # Source for the visual drag & drop component
-├── docs/                              # PIA documentation + visual dashboard
+├── AGENTS.md                          # Project operating instructions & local traps
+├── docs/                              # Progressive search-first documentation + visual dashboard
 ├── scripts/                           # bundle sync + verification scripts
 ├── LICENSE                            # GNU General Public License v3.0 (GPL-3.0-only)
 └── THIRD_PARTY_NOTICES.md             # upstream MIT / Apache / GPL credits
