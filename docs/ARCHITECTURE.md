@@ -165,3 +165,36 @@ flowchart LR
 * **To add a new IPC disk action:** follow the `mermaidWriteFile` pattern — `reqStr` every argument, route through `mermaidAuthFolder` + `mermaidContainedChild`, and cap content size.
 * **To add a new hub folder type:** extend the folder object in `addDiskFolder`, guard rendering with a `kind` check like `isDiskFolder`, and update the delete/rescan branches in `renderHubView`.
 * **To rebuild everything after changing the visual editor:** `node scripts/sync-visual-editor.cjs` then re-run the verification suite above; never hand-copy `out/` into the webapp.
+
+## 7. Upstream Tracking & Feature Merging Protocol
+
+The repository tracks upstream projects via dedicated Git remotes configured with `--no-tags` to prevent upstream tag pollution of our release versioning pipeline:
+
+| Remote Name | Upstream Repository | Local Target Subdirectory |
+|---|---|---|
+| `upstream-drawio` | `https://github.com/jgraph/drawio-desktop.git` | `drawio-desktop/` |
+| `upstream-drawio-core` | `https://github.com/jgraph/drawio.git` | `drawio-desktop/drawio/` |
+| `upstream-editor` | `https://github.com/saketkattu/mermaid-visual-editor.git` | `mermaid-visual-editor/` |
+
+### One-Command Upstream Health & Commit Inspection
+Run the diagnostic script to fetch and inspect recent commits and version deltas:
+```bash
+node scripts/check-upstream.cjs
+```
+
+### Recipes to Inspect & Selectively Merge Features
+
+1. **Diff local files against upstream:**
+   ```bash
+   git diff upstream-drawio/dev:src/main/electron.js drawio-desktop/src/main/electron.js
+   ```
+
+2. **Selectively apply an upstream commit to a subdirectory:**
+   ```bash
+   git diff <COMMIT_HASH>^! | git apply --directory=drawio-desktop/
+   ```
+
+3. **Subtree merge an entire upstream release branch:**
+   ```bash
+   git merge -s recursive -X subtree=drawio-desktop/ upstream-drawio/dev
+   ```
