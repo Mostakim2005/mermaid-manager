@@ -21,6 +21,8 @@ on:
       - 'mermaid-visual-editor/**'
       - 'scripts/**'
       - '.github/workflows/build.yml'
+      - 'LICENSE'
+      - 'THIRD_PARTY_NOTICES.md'
   workflow_dispatch:
     inputs:
       version:

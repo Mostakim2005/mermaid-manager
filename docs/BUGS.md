@@ -152,4 +152,28 @@
 * **Code Anchors**:
   * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js:527-760` (`autoFixSyntaxDetailed` and repair rules)
 
+---
+
+### BUG-014: License Incompatibility & Stale Upstream References Post-Cloud Migration
+* **Symptom**: Cloud repository retained stale upstream URLs (pointing issues and releases to `jgraph/drawio-desktop` and `saketkattu/mermaid-visual-editor`) and declared PolyForm Noncommercial 1.0.0, which was legally incompatible with `drawio-desktop`'s copyleft GPL-3.0 license.
+* **Root Cause**:
+  1. Relicensing under PolyForm Noncommercial violated GPLv3 Section 5(c) which mandates that derivative works of GPLv3 software (`drawio-desktop`) must be licensed as a whole under GPLv3.
+  2. `drawio-desktop/src/main/update-mode.js` and `drawio-desktop/src/main/electron.js` contained hardcoded upstream URLs opening `jgraph/drawio-desktop` issues and release pages.
+  3. `package.json` manifests in `drawio-desktop` and `mermaid-visual-editor` pointed to upstream GitHub repository URLs instead of `Mostakim2005/mermaid-manager`.
+* **Resolution Strategy**:
+  1. Replaced root `LICENSE` with standard GNU General Public License v3.0 (GPL-3.0-only) and updated `THIRD_PARTY_NOTICES.md` to cleanly delineate GPLv3 root licensing alongside Apache 2.0 and MIT subcomponents.
+  2. Updated `update-mode.js` (line 47) and its unit test (`update-mode.test.js`) to point to `https://github.com/Mostakim2005/mermaid-manager/releases/tag/v...`.
+  3. Updated `electron.js` (line 1889) Support link to open `https://github.com/Mostakim2005/mermaid-manager/issues`.
+  4. Updated `repository`, `bugs`, and `homepage` URLs in `drawio-desktop/package.json` and `mermaid-visual-editor/package.json`, and added owner/repo to `electron-builder-win.json` publish config.
+* **Verification**: `npm test` in `drawio-desktop` passes 257 tests (including `getReleaseUrl` tests), and `.github/workflows/build.yml` triggers on version releases.
+* **Code Anchors**:
+  * `LICENSE:1-674`
+  * `THIRD_PARTY_NOTICES.md:1-25`
+  * `drawio-desktop/src/main/update-mode.js:45-48`
+  * `drawio-desktop/src/main/electron.js:1887-1890`
+  * `drawio-desktop/src/test/update-mode.test.js:88-94`
+  * `drawio-desktop/package.json:20-36`
+  * `drawio-desktop/electron-builder-win.json:23-28`
+  * `mermaid-visual-editor/package.json:18-24`
+
 

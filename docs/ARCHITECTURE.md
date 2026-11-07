@@ -139,7 +139,7 @@ sequenceDiagram
 * **Deliberately not in Git:** `node_modules/`, `releases/`, `dist/`, `win-unpacked/`, `.next/`, `out/`, `resources/` (cloned companion tools), logs and `.env` files.
 * **Version rule (release tag is the source of truth):** on a push to `master` the workflow takes the newest `v*` tag, compares it with `drawio/VERSION`, and uses the next patch (or `drawio/VERSION` when that is newer). It stamps that number into `package.json` after `sync.cjs`, builds, and lets the release create the tag. Pushing a `v*` tag rebuilds that exact version; `workflow_dispatch` can take an explicit version.
 * **Two artifacts per release:** `MermaidApp-draw.io-v<version>-Portable.exe` (no install) and `MermaidApp-draw.io-v<version>-Setup.exe` (per-user NSIS wizard, no admin rights, Start Menu + Desktop shortcuts, optional install folder).
-* **Licensing:** root `LICENSE` is PolyForm Noncommercial 1.0.0 for MermaidApp's original code; vendored `drawio-desktop/` stays GPL-3.0-only, `drawio-desktop/drawio/` Apache-2.0, `mermaid-visual-editor/` MIT. All credits are in `THIRD_PARTY_NOTICES.md`.
+* **Licensing:** root `LICENSE` is GNU General Public License v3.0 (GPL-3.0-only), harmonizing with vendored `drawio-desktop/` (GPL-3.0-only). Subcomponents retain permissive compatible licenses: `drawio-desktop/drawio/` Apache-2.0, `mermaid-visual-editor/` MIT. All credits are in `THIRD_PARTY_NOTICES.md`.
 
 ```mermaid
 flowchart LR

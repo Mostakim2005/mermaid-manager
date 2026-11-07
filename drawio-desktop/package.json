@@ -20,20 +20,21 @@
   },
   "repository": {
     "type": "git",
-    "url": "git@github.com:jgraph/drawio-desktop.git"
+    "url": "https://github.com/Mostakim2005/mermaid-manager.git"
   },
   "keywords": [
     "draw.io",
     "diagram",
     "flowchart",
-    "UML"
+    "UML",
+    "mermaid"
   ],
   "author": "JGraph <support@draw.io>",
   "license": "GPL-3.0-only",
   "bugs": {
-    "url": "https://github.com/jgraph/drawio-desktop/issues"
+    "url": "https://github.com/Mostakim2005/mermaid-manager/issues"
   },
-  "homepage": "https://github.com/jgraph/drawio",
+  "homepage": "https://github.com/Mostakim2005/mermaid-manager",
   "dependencies": {
     "@cantoo/pdf-lib": "^2.7.3",
     "buffer": "^6.0.3",

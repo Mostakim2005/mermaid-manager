@@ -1886,7 +1886,7 @@ app.whenReady().then(() =>
 	        },
 	        {
 	          label: 'Support',
-	          click() { shell.openExternal('https://github.com/jgraph/drawio-desktop/issues'); }
+	          click() { shell.openExternal('https://github.com/Mostakim2005/mermaid-manager/issues'); }
 			},
 			...(updateMode != 'off' ? [checkForUpdates, restartToUpdateItem,
 				autoCheckForUpdates, setUpdateInterval] : []),

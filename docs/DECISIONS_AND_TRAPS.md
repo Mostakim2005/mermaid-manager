@@ -57,10 +57,10 @@ flowchart LR
 * **Code Anchors (Grep Targets):**
   * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js` -> `splitLightDarkArgs`, `resolveLightDarkCss`
 
-### [DECISION: PolyForm Noncommercial License] | Aliases: license, attribution, third-party notices
-> **1-Line Summary:** The project ships under PolyForm Noncommercial 1.0.0 with all upstream MIT/Apache/GPL credits collected in `THIRD_PARTY_NOTICES.md`, keeping license and attribution separate.
+### [DECISION: GNU GPLv3 License Harmonization] | Aliases: license, attribution, third-party notices, gpl
+> **1-Line Summary:** The project ships under GNU General Public License v3.0 (GPL-3.0-only) to strictly comply with upstream draw.io Desktop's GPL-3.0 copyleft requirements, with all subcomponent credits (Apache 2.0, MIT) collected in `THIRD_PARTY_NOTICES.md`.
 * **Decision Maker:** `[DECIDED BY: HUMAN]`
-* **Original User Intention:** Free for personal/noncommercial use with correct credit to draw.io, Next.js, React Flow, Mermaid and friends.
+* **Original User Intention:** Ensure complete open-source license compliance with draw.io Desktop (GPLv3) and eliminate proprietary/noncommercial license incompatibilities.
 * **Code Anchors (Grep Targets):**
   * `LICENSE`, `THIRD_PARTY_NOTICES.md`
 

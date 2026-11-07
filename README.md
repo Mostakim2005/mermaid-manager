@@ -21,7 +21,7 @@
    * **Mind Maps**: Central concept nodes, organic curved connectors, and topic pills.
    * **Cloud Architecture**: AWS, Azure, Google Cloud (GCP), Kubernetes, Cisco, and C4 Model shapes.
    * **Infographics & Flows**: KPI statistics cards, chevron process flows, comparison boards, and timeline funnels.
-3. **100% Free for Personal Use (PolyForm Noncommercial; upstream MIT / Apache 2.0 / GPLv3)**:
+3. **Free & Open Source (GNU GPLv3; upstream MIT / Apache 2.0 / GPLv3)**:
    * No subscription fees, no online account requirement, and zero telemetry.
 4. **Vector & Raster Exports**:
    * Export to scalable **SVG** (with embedded editable diagram data), crisp **PNG** (transparent backgrounds, custom DPI), and vectorized **PDF**.
@@ -68,6 +68,6 @@ mermaid-manager/
 ├── mermaid-visual-editor/             # Source for the visual drag & drop component
 ├── docs/                              # PIA documentation + visual dashboard
 ├── scripts/                           # bundle sync + verification scripts
-├── LICENSE                            # PolyForm Noncommercial 1.0.0
+├── LICENSE                            # GNU General Public License v3.0 (GPL-3.0-only)
 └── THIRD_PARTY_NOTICES.md             # upstream MIT / Apache / GPL credits
 ```

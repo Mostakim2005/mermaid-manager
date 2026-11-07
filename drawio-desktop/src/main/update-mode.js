@@ -44,5 +44,5 @@ export function getUpdateMode({platform, env, execPath, resourcesPath, productNa
 // Release page for the download link in notify mode
 export function getReleaseUrl(version)
 {
-	return 'https://github.com/jgraph/drawio-desktop/releases/tag/v' + encodeURIComponent(version);
+	return 'https://github.com/Mostakim2005/mermaid-manager/releases/tag/v' + encodeURIComponent(version);
 }

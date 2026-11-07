@@ -48,6 +48,14 @@ This catalog provides exact file paths and line anchors for all features integra
   * `mermaid-visual-editor/components/Canvas.tsx:1-310`
   * `mermaid-visual-editor/components/TopToolbar.tsx:1-290`
   * `mermaid-visual-editor/app/page.tsx:1-165`
+
+### F-08: Self-Contained Cloud CI/CD Release Pipeline & GPLv3 Harmonization
+* **Description**: Automated GitHub Actions CI workflow that computes patch auto-incremented versions from Git tags, stamps package manifests, builds both portable `.exe` and NSIS installer `.exe` on Windows runners, and publishes GitHub releases. Project is licensed under GNU GPLv3 to ensure full legal copyleft compatibility with draw.io Desktop.
+* **Anchors**:
+  * `.github/workflows/build.yml:1-146` (`build-portable`, version auto-bump, `softprops/action-gh-release@v2`)
+  * `drawio-desktop/electron-builder-win.json:1-88` (portable + NSIS targets, GitHub publisher)
+  * `LICENSE:1-674` (GNU General Public License v3.0)
+  * `THIRD_PARTY_NOTICES.md:1-60` (attribution & license harmonization)
   * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js:960-1160` (`openVisualMermaidEditor`, `applyMermaidToCanvas`)
 
 ### F-08: Native Export to Vector SVG, PNG, and PDF & Portable Desktop Executable

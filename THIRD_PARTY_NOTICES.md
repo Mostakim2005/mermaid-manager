@@ -1,11 +1,8 @@
 # Third-Party Notices
 
-MermaidApp Studio (`mermaid-manager`) is a fork/wrapper around draw.io Desktop with an
-additional two-way Mermaid visual editor. The root [`LICENSE`](LICENSE) (PolyForm
-Noncommercial 1.0.0) covers the original MermaidApp code in this repository.
+MermaidApp Studio (`mermaid-manager`) is licensed under the GNU General Public License v3.0 (GPL-3.0-only) as defined in the root [`LICENSE`](LICENSE), harmonizing with the upstream GPL-3.0 license of draw.io Desktop.
 
-The vendored upstream projects below keep their own licenses. Their license texts are
-kept next to their source:
+The vendored subprojects and dependencies retain their respective open-source licenses:
 
 - `drawio-desktop/LICENSE` — GPL-3.0-only
 - `drawio-desktop/drawio/LICENSE` — Apache-2.0

@@ -17,10 +17,10 @@
   "homepage": "https://mermaid-visual-editor-delta.vercel.app/",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/saketkattu/mermaid-visual-editor.git"
+    "url": "https://github.com/Mostakim2005/mermaid-manager.git"
   },
   "bugs": {
-    "url": "https://github.com/saketkattu/mermaid-visual-editor/issues"
+    "url": "https://github.com/Mostakim2005/mermaid-manager/issues"
   },
   "engines": {
     "node": ">=18"

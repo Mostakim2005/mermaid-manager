@@ -21,7 +21,9 @@
   },
   "npmRebuild": false,
   "publish": {
-    "provider": "github"
+    "provider": "github",
+    "owner": "Mostakim2005",
+    "repo": "mermaid-manager"
   },
   "win": {
     "signtoolOptions": {
