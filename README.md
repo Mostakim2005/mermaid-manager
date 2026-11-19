@@ -12,20 +12,25 @@
 ## Key Features
 
 1. **Two-Way Visual Drag & Drop Mermaid Editor**:
-   * Click **⚡ Mermaid Visual** on the top toolbar or right-click any diagram cell to open the visual canvas.
-   * Drag nodes, reconnect arrows, change hierarchy directions (TB, BT, LR, RL), switch color themes, and edit subgraphs visually.
-   * Real-time bidirectional synchronization: `.mmd` code updates as you drag, and clicking **Sync to Draw.io** injects the vector shapes onto your Draw.io canvas.
-2. **Comprehensive Diagram Type Coverage**:
+   * Click **⚡ 2-Way Visual Editor** on the top toolbar or right-click any diagram cell to open the visual canvas.
+   * Drag nodes, reconnect arrows, change hierarchy directions (TB, BT, LR, RL), switch color themes, and edit nested subgraphs visually.
+   * Real-time bidirectional synchronization: `.mmd` code updates as you drag, and clicking **⚡ Apply to Draw.io Canvas** (or **✓ Sync to Draw.io**) injects the vector shapes onto your Draw.io canvas.
+2. **Universal Code-to-Diagram Studio (`Ctrl+Shift+M`) & Syntax Auto-Fixer**:
+   * Paste Mermaid, PlantUML, Markdown outlines, or Radar/Infographic DSL to preview and insert editable diagrams onto the canvas.
+   * Built-in **🔧 Auto-Fix Syntax** repairs common Mermaid flowchart issues (smart quotes, broken arrows, unquoted labels, unclosed brackets/subgraphs) with a plain-English summary and one-click **↶ Undo Auto-Fix**.
+3. **Diagrams & Folders Workspace Hub (`Ctrl+Shift+D`)**:
+   * Organize diagrams in local folders or link real PC folders containing `.mmd`, `.md`, and `.drawio` files via Electron's blessed-path IPC (with disk write-back, multi-block Markdown support, favorites, and search).
+4. **Comprehensive Diagram Type Coverage**:
    * **Flowcharts & State Machines**: Full Mermaid and draw.io flowcharting capabilities.
    * **Radar & Spider Diagrams**: Built-in 5-axis, 6-axis, and 8-axis geometric grid and data polygon stencils in the sidebar.
    * **Mind Maps**: Central concept nodes, organic curved connectors, and topic pills.
    * **Cloud Architecture**: AWS, Azure, Google Cloud (GCP), Kubernetes, Cisco, and C4 Model shapes.
    * **Infographics & Flows**: KPI statistics cards, chevron process flows, comparison boards, and timeline funnels.
-3. **Free & Open Source (GNU GPLv3; upstream MIT / Apache 2.0 / GPLv3)**:
+5. **Free & Open Source (GNU GPLv3; upstream MIT / Apache 2.0 / GPLv3)**:
    * No subscription fees, no online account requirement, and zero telemetry.
-4. **Vector & Raster Exports**:
+6. **Vector & Raster Exports**:
    * Export to scalable **SVG** (with embedded editable diagram data), crisp **PNG** (transparent backgrounds, custom DPI), and vectorized **PDF**.
-5. **Portable build and Windows installer (built in the cloud)**:
+7. **Portable build and Windows installer (built in the cloud)**:
    * Every release ships two files: `MermaidApp-draw.io-v<version>-Setup.exe` (installer with Start Menu/Desktop shortcuts) and `MermaidApp-draw.io-v<version>-Portable.exe` (run immediately, no installation).
    * Attached to [GitHub Releases](https://github.com/Mostakim2005/mermaid-manager/releases); no local build toolchain needed.
 
@@ -40,14 +45,14 @@
 
 ### How releases are made automatically
 1. Every push to `master` that changes app code triggers the **Build Portable + Installer** workflow.
-2. The version is bumped automatically (next patch after the newest tag) and stamped into the app; the workflow creates the tag and publishes the GitHub Release with both files.
+2. The workflow rebuilds and syncs the visual editor bundle, runs syntax and unit test gates, auto-bumps the version (next patch after the newest tag), creates the tag, and publishes the GitHub Release with both files.
 3. Pushing a `v*` tag yourself rebuilds exactly that version; a manual run can take an explicit version too.
 4. `drawio-desktop/drawio/VERSION` is only upstream's reference version — the release tag is the source of truth.
 
 ### Using the Visual Drag-and-Drop Editor
-1. In draw.io, click the **⚡ Mermaid Visual** button on the toolbar (or navigate to `Arrange > Insert > Advanced > Visual Mermaid Editor`).
+1. In draw.io, click the **⚡ 2-Way Visual Editor** button on the toolbar (or navigate to `Arrange > Insert > Advanced > Visual Mermaid Editor`).
 2. In the floating editor window, draw or rearrange nodes on the canvas.
-3. Click **Sync to Draw.io Canvas** to render your diagram directly into draw.io shapes.
+3. Click **⚡ Apply to Draw.io Canvas** (or **✓ Sync to Draw.io**) to render your diagram directly into draw.io shapes.
 4. To edit an existing diagram, select it on the canvas and click **📥 Load from Selected Cell** inside the visual editor window.
 
 ---

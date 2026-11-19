@@ -37,15 +37,16 @@ flowchart LR
   * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js` -> `inAppDialog`, `appPrompt`, `appConfirm`
 
 ### [DECISION: Blessed-Path IPC for Disk Access] | Aliases: PC folders, file permissions, folder authorization
-> **1-Line Summary:** Hub disk access goes through four dedicated main-process IPC actions reusing draw.io's blessed-path security model, instead of a blanket file-system grant or a webkitdirectory picker workaround.
+> **1-Line Summary:** Hub disk access goes through five dedicated main-process IPC actions reusing draw.io's blessed-path security model, instead of a blanket file-system grant or a webkitdirectory picker workaround.
 * **Decision Maker:** `[DECIDED BY: AGENT - Approved by Human]`
 * **Original User Intention:** Import real `.mmd`/`.md` folders from the C: drive into the hub and keep them synced, without weakening app security.
 * **Options Considered:**
   * **Option A (Rejected):** `<input webkitdirectory>` — the browser keeps no real paths, cannot re-scan without re-picking, and cannot write at all.
   * **Option B (Rejected):** Grant the renderer generic `fs` access — breaks draw.io's security posture (a renderer XSS could read/write anything).
-  * **Option C (Chosen):** `mermaidListFolder/ReadFile/WriteFile/DeleteFile` in `electron.js`; folders are blessed by the native dialog and persisted; child paths are sanitized and realpath-contained on the trusted side.
+  * **Option C (Chosen):** `mermaidListFolder/ReadFile/WriteFile/DeleteFile/MakeFolder` in `electron.js` backed by pure validation helpers in `mermaid-ipc.js`; folders are blessed by the native dialog and persisted; child paths are sanitized, extension-allow-listed, byte-size-capped, and realpath-contained on the trusted side.
 * **Code Anchors (Grep Targets):**
-  * `drawio-desktop/src/main/electron.js` -> `mermaidAuthFolder`, `mermaidContainedChild`, `reqMermaidName`
+  * `drawio-desktop/src/main/mermaid-ipc.js` -> `reqMermaidName`, `assertMermaidReadExt`, `assertMermaidWriteExt`, `assertMermaidWriteSize`
+  * `drawio-desktop/src/main/electron.js` -> `mermaidAuthFolder`, `mermaidContainedChild`, `mermaidMakeFolder`
 
 ### [DECISION: Paren-Aware Light-Dark Resolver] | Aliases: contrast fix, dark mode inversion, color-scheme
 > **1-Line Summary:** The contrast resolver splits `light-dark()` arguments with parenthesis-depth tracking instead of a naive comma split, and pins `color-scheme` per canvas.
@@ -115,11 +116,12 @@ flowchart LR
   * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js` -> `inAppDialog`, `appPrompt`, `appConfirm`
 
 ### [TRAP: Plugin Idempotency Guard Is Window-Global] | Aliases: duplicate palettes, triple sidebar, plugin initialized
-> **1-Line Summary:** Never move `window.__mermaidStudioPluginInitialized` back into a closure-local variable — draw.io loads the plugin from multiple bootstraps and each closure would re-register palettes.
-* **Strict Rule:** **NEVER** change `var pluginInitialized`-style guards back to closure scope, and keep the `ui.sidebar._customMermaidPalettesAdded` stamp before `addPaletteFunctions`.
-* **Why This Trap Exists (Plain English):** The plugin script executes once per load path (index.html, ElectronApp.js, PostConfig.js); a closure flag resets per execution, so sidebars and toolbar buttons appear two or three times.
+> **1-Line Summary:** Never move `window.__mermaidStudioPluginInitialized` back into a closure-local variable — keeping it window-global prevents duplicate palette/toolbar registration if the plugin is ever loaded more than once.
+* **Strict Rule:** **NEVER** change `var pluginInitialized`-style guards back to closure scope, keep the `ui.sidebar._customMermaidPalettesAdded` stamp before `addPaletteFunctions`, and keep `ElectronApp.js` as the single authoritative script load (do not re-add duplicate loads in `index.html` or `PostConfig.js`).
+* **Why This Trap Exists (Plain English):** Earlier builds loaded the plugin from three places (`index.html`, `PostConfig.js`, and `ElectronApp.js`); a closure flag reset per execution, causing duplicate sidebars and toolbar buttons. Even with a single load path, the window-global guard remains essential defense-in-depth.
 * **Protected Code Anchors (Grep Targets):**
   * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js` -> `initMermaidStudioPlugin` guard, `injectNativeToolbarButtons` early-return
+  * `drawio-desktop/drawio/src/main/webapp/js/diagramly/ElectronApp.js` -> single `mxscript('./plugins/mermaid-visual-editor.js')` load
 
 ### [TRAP: CSP and Base-URI Interactions With Iframe] | Aliases: iframe blocked, ERR_BLOCKED_BY_CLIENT, base-uri none
 > **1-Line Summary:** Never loosen or bypass the app CSP or add `<base>` elements to test asset loading — draw.io's CSP intentionally pins `base-uri 'none'` and the electron.js redirect is the sanctioned asset path.
@@ -131,8 +133,8 @@ flowchart LR
 
 ### [TRAP: Portability of Verification Scripts] | Aliases: ELECTRON_RUN_AS_NODE, CDP target missing, probe hang
 > **1-Line Summary:** Never let `ELECTRON_RUN_AS_NODE` leak into Electron spawns from Node-based verification scripts — Electron starts as a plain Node REPL with no app and no CDP server, and the probe waits forever.
-* **Strict Rule:** **NEVER** spawn `electron.cmd`/`electron.exe` from the verifier without `delete env.ELECTRON_RUN_AS_NODE`, and always load the page before evaluating (the CDP target appears only after boot).
+* **Strict Rule:** **NEVER** spawn `electron.cmd`/`electron.exe` from the verifier without `delete env.ELECTRON_RUN_AS_NODE`, always use an isolated `--user-data-dir` with BOM-free `config.json`, and always load the page before evaluating (the CDP target appears only after boot).
 * **Why This Trap Exists (Plain English):** The harness session exports that variable for its own Node tooling; a child Electron inherits it and silently becomes a REPL, so the "app page target never appeared" error is an environment leak, not an app bug.
 * **Protected Code Anchors (Grep Targets):**
-  * `scripts/verify-ipc-integration.mjs` -> `childEnv` cleanup
-  * `scripts/verify-packaged-exe.mjs` -> spawn options
+  * `scripts/verify-ipc-integration.mjs` -> `childEnv` cleanup + `USER_DATA_DIR`
+  * `scripts/verify-packaged-exe.mjs` -> `childEnv` cleanup + `USER_DATA_DIR`

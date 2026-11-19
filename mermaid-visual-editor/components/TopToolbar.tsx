@@ -135,7 +135,26 @@ export function TopToolbar({ inspectorOpen, onToggleInspector, onOpenPalette, sy
   const settingsRef = useRef<HTMLDivElement>(null)
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(syntax)
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(syntax)
+      } else {
+        throw new Error('Clipboard API unavailable')
+      }
+    } catch {
+      try {
+        const ta = document.createElement('textarea')
+        ta.value = syntax
+        ta.style.position = 'fixed'
+        ta.style.opacity = '0'
+        document.body.appendChild(ta)
+        ta.select()
+        document.execCommand('copy')
+        document.body.removeChild(ta)
+      } catch {
+        return
+      }
+    }
     setCopied(true)
     setTimeout(() => setCopied(false), 1500)
   }

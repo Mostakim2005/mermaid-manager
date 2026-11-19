@@ -5,6 +5,8 @@ import type { Direction, FlowNodeData } from './store'
 const NODE_WIDTH = 150
 const NODE_HEIGHT = 60
 const SUBGRAPH_PADDING = 40
+const MIN_SUBGRAPH_WIDTH = 240
+const MIN_SUBGRAPH_HEIGHT = 160
 
 const RANKDIR: Record<Direction, string> = {
   TD: 'TB',
@@ -24,13 +26,19 @@ export function applyDagreLayout(
   g.setDefaultEdgeLabel(() => ({}))
   g.setGraph({ rankdir: RANKDIR[direction], nodesep: 60, ranksep: 80 })
 
+  // Track which subgraphs have children so empty ones retain visible dimensions
+  const subgraphsWithChildren = new Set<string>()
+  for (const node of nodes) {
+    if (node.parentId) subgraphsWithChildren.add(node.parentId)
+  }
+
   // Add all nodes
   for (const node of nodes) {
     if (node.data?.isSubgraph) {
-      // Let dagre auto-size subgraphs from children; provide padding
+      const hasChildren = subgraphsWithChildren.has(node.id)
       g.setNode(node.id, {
-        width: 0,
-        height: 0,
+        width: hasChildren ? 0 : MIN_SUBGRAPH_WIDTH,
+        height: hasChildren ? 0 : MIN_SUBGRAPH_HEIGHT,
         paddingX: SUBGRAPH_PADDING,
         paddingY: SUBGRAPH_PADDING,
       })
@@ -57,19 +65,21 @@ export function applyDagreLayout(
 
   return nodes.map((node) => {
     const layout = g.node(node.id)
-    if (!layout) return node
+    if (!layout || !Number.isFinite(layout.x) || !Number.isFinite(layout.y)) return node
 
     if (node.data?.isSubgraph) {
+      const sw = Number.isFinite(layout.width) && layout.width > 0 ? Math.max(layout.width, MIN_SUBGRAPH_WIDTH) : MIN_SUBGRAPH_WIDTH
+      const sh = Number.isFinite(layout.height) && layout.height > 0 ? Math.max(layout.height, MIN_SUBGRAPH_HEIGHT) : MIN_SUBGRAPH_HEIGHT
       return {
         ...node,
         position: {
-          x: layout.x - layout.width / 2,
-          y: layout.y - layout.height / 2,
+          x: layout.x - sw / 2,
+          y: layout.y - sh / 2,
         },
         style: {
           ...node.style,
-          width: layout.width,
-          height: layout.height,
+          width: sw,
+          height: sh,
         },
       }
     }
@@ -77,11 +87,13 @@ export function applyDagreLayout(
     if (node.parentId) {
       // Convert dagre absolute coords to parent-relative for React Flow
       const parentLayout = g.node(node.parentId)
-      if (!parentLayout) return node
+      if (!parentLayout || !Number.isFinite(parentLayout.x) || !Number.isFinite(parentLayout.y)) return node
       const w = typeof node.style?.width === 'number' ? node.style.width : NODE_WIDTH
       const h = typeof node.style?.height === 'number' ? node.style.height : NODE_HEIGHT
-      const parentTopLeftX = parentLayout.x - parentLayout.width / 2
-      const parentTopLeftY = parentLayout.y - parentLayout.height / 2
+      const pw = Number.isFinite(parentLayout.width) && parentLayout.width > 0 ? Math.max(parentLayout.width, MIN_SUBGRAPH_WIDTH) : MIN_SUBGRAPH_WIDTH
+      const ph = Number.isFinite(parentLayout.height) && parentLayout.height > 0 ? Math.max(parentLayout.height, MIN_SUBGRAPH_HEIGHT) : MIN_SUBGRAPH_HEIGHT
+      const parentTopLeftX = parentLayout.x - pw / 2
+      const parentTopLeftY = parentLayout.y - ph / 2
       return {
         ...node,
         position: {

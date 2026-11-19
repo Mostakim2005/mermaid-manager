@@ -122,18 +122,37 @@ export function serialize(
     lines.push(`  ${shapeWrap(node.id, label, shape)}`)
   }
 
-  // ── Subgraph blocks ───────────────────────────────────────────────────────
-  for (const sg of subgraphNodes) {
+  // ── Subgraph blocks (recursive to support nested subgraphs) ───────────────
+  const subgraphIds = new Set(subgraphNodes.map((s) => s.id))
+  const topLevelSubgraphs = subgraphNodes.filter((s) => !s.parentId || !subgraphIds.has(s.parentId))
+  const visitedSubgraphs = new Set<string>()
+
+  function emitSubgraph(sg: Node<FlowNodeData>, depth: number) {
+    if (visitedSubgraphs.has(sg.id)) return
+    visitedSubgraphs.add(sg.id)
+    const indent = '  '.repeat(depth)
+    const childIndent = '  '.repeat(depth + 1)
     const sgId = sanitizeId(sg.id)
     const sgLabel = escapeLabel(sg.data.label || sg.id)
-    lines.push(`  subgraph ${sgId} ["${sgLabel}"]`)
-    const children = childNodes.filter((c) => c.parentId === sg.id)
-    for (const child of children) {
+    lines.push(`${indent}subgraph ${sgId} ["${sgLabel}"]`)
+
+    const directChildren = childNodes.filter((c) => c.parentId === sg.id)
+    for (const child of directChildren) {
       const shape = (child.data.shape ?? 'rectangle') as NodeShape
       const label = child.data.label || child.id
-      lines.push(`    ${shapeWrap(child.id, label, shape)}`)
+      lines.push(`${childIndent}${shapeWrap(child.id, label, shape)}`)
     }
-    lines.push(`  end`)
+
+    const nestedSubgraphs = subgraphNodes.filter((sub) => sub.parentId === sg.id)
+    for (const nested of nestedSubgraphs) {
+      emitSubgraph(nested, depth + 1)
+    }
+
+    lines.push(`${indent}end`)
+  }
+
+  for (const sg of topLevelSubgraphs) {
+    emitSubgraph(sg, 1)
   }
 
   // ── Node styles (only for custom-coloured nodes) ──────────────────────────

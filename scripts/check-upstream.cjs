@@ -23,32 +23,83 @@ function run(cmd, opts = {}) {
   }
 }
 
+function hasRemote(name) {
+  return run(`git remote get-url ${name}`) !== null;
+}
+
+function detectRemoteBranch(remote, preferred) {
+  const headRef = run(`git symbolic-ref --short refs/remotes/${remote}/HEAD`);
+  if (headRef && headRef.startsWith(`${remote}/`)) {
+    return headRef.slice(remote.length + 1);
+  }
+  for (const branch of preferred) {
+    if (run(`git rev-parse --verify refs/remotes/${remote}/${branch}`) !== null) {
+      return branch;
+    }
+  }
+  return null;
+}
+
+function checkUpstream({ index, label, remote, repoUrl, preferredBranches, extraInfo }) {
+  console.log(`${index > 1 ? '\n' : ''}[${index}] ${label}:`);
+  if (extraInfo) console.log(`    ${extraInfo}`);
+
+  if (!hasRemote(remote)) {
+    console.log(`    ⚠ Remote '${remote}' is not configured.`);
+    console.log(`      Run: git remote add ${remote} ${repoUrl}`);
+    return;
+  }
+
+  // Never fetch upstream tags (TRAP 4: foreign tags pollute auto-bump versioning).
+  const fetchOut = run(`git fetch ${remote} --no-tags --depth=10`);
+  if (fetchOut === null) {
+    console.log(`    ⚠ Failed to fetch '${remote}' (check network or remote URL).`);
+    return;
+  }
+
+  const branch = detectRemoteBranch(remote, preferredBranches);
+  if (!branch) {
+    console.log(`    ⚠ Could not detect default branch on '${remote}' (checked: ${preferredBranches.join(', ')}).`);
+    return;
+  }
+
+  const latestCommits = run(`git log ${remote}/${branch} --oneline -n 5`);
+  if (latestCommits) {
+    console.log(`    Latest ${remote}/${branch} commits:`);
+    latestCommits.split('\n').forEach(c => console.log(`      * ${c}`));
+  } else {
+    console.log(`    (No commits returned for ${remote}/${branch})`);
+  }
+}
+
 console.log('🔍 Checking upstream repositories for updates...\n');
 
-// 1. Check drawio-desktop
 const currentDrawioVersion = fs.readFileSync(path.join(ROOT, 'drawio-desktop', 'drawio', 'VERSION'), 'utf8').trim();
-console.log(`[1] draw.io Desktop:`);
-console.log(`    Current local drawio base version: ${currentDrawioVersion}`);
 
-run('git fetch upstream-drawio --no-tags --depth=10');
-const latestDrawioCommits = run('git log upstream-drawio/dev --oneline -n 5');
-if (latestDrawioCommits) {
-  console.log(`    Latest upstream-drawio/dev commits:`);
-  latestDrawioCommits.split('\n').forEach(c => console.log(`      * ${c}`));
-} else {
-  console.log(`    (Could not fetch or upstream-drawio is up to date)`);
-}
+checkUpstream({
+  index: 1,
+  label: 'draw.io Desktop',
+  remote: 'upstream-drawio',
+  repoUrl: 'https://github.com/jgraph/drawio-desktop.git',
+  preferredBranches: ['dev', 'master', 'main'],
+  extraInfo: `Current local drawio base version: ${currentDrawioVersion}`,
+});
 
-// 2. Check mermaid-visual-editor
-console.log(`\n[2] Mermaid Visual Editor:`);
-run('git fetch upstream-editor --no-tags --depth=10');
-const latestEditorCommits = run('git log upstream-editor/master --oneline -n 5');
-if (latestEditorCommits) {
-  console.log(`    Latest upstream-editor/master commits:`);
-  latestEditorCommits.split('\n').forEach(c => console.log(`      * ${c}`));
-} else {
-  console.log(`    (Could not fetch or upstream-editor is up to date)`);
-}
+checkUpstream({
+  index: 2,
+  label: 'draw.io Core Webapp',
+  remote: 'upstream-drawio-core',
+  repoUrl: 'https://github.com/jgraph/drawio.git',
+  preferredBranches: ['dev', 'master', 'main'],
+});
+
+checkUpstream({
+  index: 3,
+  label: 'Mermaid Visual Editor',
+  remote: 'upstream-editor',
+  repoUrl: 'https://github.com/Mostakim2005/mermaid-visual-editor.git',
+  preferredBranches: ['main', 'master'],
+});
 
 console.log(`\n======================================================`);
 console.log(`💡 HOW TO MERGE OR CHERRY-PICK UPSTREAM FEATURES:`);

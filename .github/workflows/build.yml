@@ -89,6 +89,11 @@ jobs:
           "RELEASE_TAG=v$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           Write-Host "Releasing $version (tag v$version)"
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
@@ -96,8 +101,31 @@ jobs:
           cache: npm
           cache-dependency-path: drawio-desktop/package-lock.json
 
-      - name: Install dependencies
+      - name: Install drawio-desktop dependencies
         run: npm ci
+
+      - name: Install visual editor dependencies
+        working-directory: mermaid-visual-editor
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Build and sync visual editor bundle
+        working-directory: .
+        run: node scripts/sync-visual-editor.cjs
+
+      - name: Verify syntax and run unit tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          node --check src/main/electron.js
+          node --check src/main/mermaid-ipc.js
+          node --check drawio/src/main/webapp/plugins/mermaid-visual-editor.js
+          npm test
+          Push-Location ../mermaid-visual-editor
+          try {
+            node --test lib/*.test.ts
+          } finally {
+            Pop-Location
+          }
 
       - name: Sync version and disable self-update
         # drawio/VERSION stays upstream's version; the release version is

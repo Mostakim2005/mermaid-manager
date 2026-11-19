@@ -8,13 +8,13 @@
 
 ## 2. Mandatory Verification & Build Commands
 * **Run App Locally:** `cd drawio-desktop; npm start`
-* **Test Suite:** `cd drawio-desktop; npm test` (Node.js built-in test runner, 257 passing tests)
+* **Test Suite:** `cd drawio-desktop; npm test` (Node.js built-in test runner) and `cd mermaid-visual-editor; node --test lib/*.test.ts`
 * **Visual Editor Build & Bundle Sync:** `node scripts/sync-visual-editor.cjs`
 * **Check Upstream Updates:** `node scripts/check-upstream.cjs`
 * **Cloud Build / Packaging:** Triggered by git tag or push to master in GitHub Actions (`.github/workflows/build.yml`). Local test build: `cd drawio-desktop; node ./sync.cjs; $env:DRAWIO_UNSIGNED='true'; npx electron-builder --config electron-builder-win.json --publish never`
 
 ## 3. Repository Directory Structure & Conventions
-* `drawio-desktop/` - Electron host process (`src/main/electron.js`) & vendored draw.io webapp (`drawio/`).
+* `drawio-desktop/` - Electron host process (`src/main/electron.js`, `src/main/mermaid-ipc.js`) & vendored draw.io webapp (`drawio/`).
 * `mermaid-visual-editor/` - Next.js React Flow drag-and-drop editor source (`out/` compiled bundle).
 * `scripts/` - Maintenance & diagnostic tooling (`sync-visual-editor.cjs`, `check-upstream.cjs`).
 * `docs/` - Core documentation suite (`PRODUCT.md`, `ARCHITECTURE.md`, `DECISIONS_AND_TRAPS.md`, `VISUAL_GUIDE.html`). Search-first slug headers only; no line-number anchors or `INDEX.md`.

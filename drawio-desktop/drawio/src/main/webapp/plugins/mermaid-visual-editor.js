@@ -7,9 +7,10 @@
 (function() {
     // Global theme helper
     function isDarkMode() {
+        var activeUi = window.__activeDrawioUi;
         return document.body.classList.contains('geDarkMode') ||
                document.documentElement.getAttribute('data-theme') === 'dark' ||
-               (typeof ui !== 'undefined' && ui.editor && ui.editor.isDarkMode && ui.editor.isDarkMode());
+               !!(activeUi && activeUi.editor && activeUi.editor.isDarkMode && activeUi.editor.isDarkMode());
     }
 
     // SVG CSS light-dark helper (prevents white-on-white text inversion in exported/previewed SVGs)
@@ -53,38 +54,6 @@
         out = out.replace(/color-scheme\s*:\s*[^;"']+/g, 'color-scheme: ' + (wantDark ? 'dark' : 'light'));
 
         return out;
-    }
-
-    // Plain colour maths for the app-wide theme check.
-    function parseCssColor(c) {
-        if (!c) return null;
-        c = String(c).trim();
-        var hex = c.match(/^#([0-9a-f]{3,8})$/i);
-        if (hex) {
-            var h = hex[1];
-            if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
-            return [parseInt(h.substr(0, 2), 16), parseInt(h.substr(2, 2), 16), parseInt(h.substr(4, 2), 16)];
-        }
-        var rgb = c.match(/^rgba?\(([^)]+)\)$/i);
-        if (rgb) {
-            var p = rgb[1].split(/[,\s/]+/).filter(Boolean).map(parseFloat);
-            return [p[0] || 0, p[1] || 0, p[2] || 0];
-        }
-        return null;
-    }
-
-    function relativeLuminance(rgb) {
-        var a = rgb.map(function(v) {
-            v /= 255;
-            return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
-        });
-        return 0.2126 * a[0] + 0.7152 * a[1] + 0.0722 * a[2];
-    }
-
-    function contrastRatio(fg, bg) {
-        var l1 = relativeLuminance(fg);
-        var l2 = relativeLuminance(bg);
-        return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
     }
 
     // HTML escape helper
@@ -466,6 +435,32 @@
             '.geDarkMode .hub-nav-item.active, [data-theme="dark"] .hub-nav-item.active {',
             '    background: #1e293b;',
             '    color: #60a5fa;',
+            '}',
+            ':root {',
+            '    --ms-bg: #ffffff;',
+            '    --ms-surface: #f8fafc;',
+            '    --ms-surface-alt: #f1f5f9;',
+            '    --ms-border: #e2e8f0;',
+            '    --ms-border-strong: #cbd5e1;',
+            '    --ms-text: #0f172a;',
+            '    --ms-muted: #64748b;',
+            '    --ms-accent: #2563eb;',
+            '    --ms-accent-bg: #eff6ff;',
+            '    --ms-code-bg: #ffffff;',
+            '    --ms-code-text: #0f172a;',
+            '}',
+            '.geDarkMode, [data-theme="dark"] {',
+            '    --ms-bg: #0f172a;',
+            '    --ms-surface: #1e293b;',
+            '    --ms-surface-alt: #18191c;',
+            '    --ms-border: #334155;',
+            '    --ms-border-strong: #475569;',
+            '    --ms-text: #f8fafc;',
+            '    --ms-muted: #94a3b8;',
+            '    --ms-accent: #60a5fa;',
+            '    --ms-accent-bg: #1e293b;',
+            '    --ms-code-bg: #090d16;',
+            '    --ms-code-text: #38bdf8;',
             '}'
         ].join('\n');
         document.head.appendChild(styleEl);
@@ -476,6 +471,7 @@
         if (window.__mermaidStudioPluginInitialized) return;
         if (!ui || !ui.editor || !ui.editor.graph) return;
         window.__mermaidStudioPluginInitialized = true;
+        window.__activeDrawioUi = ui;
 
         var graph = ui.editor.graph;
         injectCustomStyles();
@@ -492,11 +488,16 @@
         var visualEditorWindow = null;
         var editorIframe = null;
         var activeTargetCell = null;
+        var pendingVisualEditorCode = null;
 
         // Current Studio State
         var currentRenderedSvg = '';
         var currentRenderedXml = '';
+        var currentRenderedSource = '';
         var currentDetectedType = { id: 'empty', label: 'Waiting for Code...' };
+        var renderSeq = 0;
+        var activeEditingDiagram = null;
+        var lastCodeBeforeAutoFix = null;
         var studioModal = null;
         var previewInner = null;
         var previewContainer = null;
@@ -504,6 +505,7 @@
         var autoDetectBadge = null;
         var statusBar = null;
         var quickFixBtn = null;
+        var undoFixBtn = null;
         var zoomLevel = 1.0;
         var panOffsetX = 0;
         var panOffsetY = 0;
@@ -519,8 +521,25 @@
         var hubCurrentFolder = 'all';
         var hubIsFavorites = false;
         var hubSearchQuery = '';
+        var hubSearchDebounceTimer = null;
         var hubSortMode = 'updated';
         var hubViewMode = 'grid'; // 'grid' | 'list'
+
+        // Sync dark mode changes to the 2-Way Visual Editor iframe automatically
+        function postThemeToVisualEditor() {
+            if (editorIframe && editorIframe.contentWindow) {
+                try {
+                    editorIframe.contentWindow.postMessage({ type: 'SET_THEME', dark: isDarkMode() }, '*');
+                } catch (e) {}
+            }
+        }
+        try {
+            var themeObserver = new MutationObserver(function() {
+                postThemeToVisualEditor();
+            });
+            themeObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+            themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+        } catch (e) {}
 
         // ==========================================
         // 1. AST & SYNTAX AUTO-FIXER ENGINE
@@ -547,7 +566,10 @@
             block: '^block-beta\\b',
             architecture: '^architecture-beta\\b',
             packet: '^packet(-beta)?\\b',
-            radar: '^(radar|spider)\\b'
+            radar: '^(radar|spider)\\b',
+            infographic: '^infographic\\b',
+            plantuml: '^@start[a-z]+\\b',
+            markdown: '^#\\s+'
         };
 
         function mermaidFamily(code) {
@@ -558,22 +580,25 @@
             return 'flowchart'; // bare edge lists are treated as flowcharts
         }
 
-        // Smart quotes, non-breaking spaces and full-width punctuation pasted from docs.
-        function repairUnicode(code) {
+        // Smart quotes, non-breaking spaces and (for flowcharts) typographic dashes pasted from docs.
+        function repairUnicode(code, family) {
             var before = code;
             code = code.replace(/[\u201C\u201D\u2033]/g, '"')
                        .replace(/[\u2018\u2019\u2032]/g, "'")
-                       .replace(/\u00A0/g, ' ')
-                       // en-dash runs stand in for Mermaid's -- / --- operators
-                       .replace(/\u2014/g, '---')
-                       .replace(/\u2013\u2013\u2013/g, '---')
-                       .replace(/\u2013\u2013/g, '--')
-                       .replace(/\u2013(?=\s*>)/g, '--');
+                       .replace(/\u00A0/g, ' ');
+            if (family === 'flowchart') {
+                // en-dash / em-dash runs stand in for Mermaid's -- / --- operators
+                code = code.replace(/\u2014/g, '---')
+                           .replace(/\u2013\u2013\u2013/g, '---')
+                           .replace(/\u2013\u2013/g, '--')
+                           .replace(/\u2013(?=\s*>)/g, '--');
+            }
             return { code: code, changed: code !== before };
         }
 
         // Arrows typed with stray spaces or a single dash: A -> B, A -- > B, A -. > B
-        function repairArrows(code) {
+        function repairArrows(code, family) {
+            if (family !== 'flowchart') return { code: code, changed: false };
             var before = code;
             code = code.replace(/--\s+>/g, '-->')
                        .replace(/-\.\s+>/g, '-.->')
@@ -584,9 +609,11 @@
         }
 
         // Labels containing (), :, ; or commas break the unquoted [] parser.
-        function repairUnquotedLabels(code) {
+        // Exclude Mermaid shape delimiters: [[...]], [(...)], [/.../], [\...\], [/...\], [\.../].
+        function repairUnquotedLabels(code, family) {
+            if (family !== 'flowchart') return { code: code, changed: false };
             var before = code;
-            code = code.replace(/([A-Za-z0-9_.-]+)\s*\[(?!\[)([^\]"\n]*[():\u002c][^\]"\n]*)\]/g, function(match, id, label) {
+            code = code.replace(/([A-Za-z0-9_.-]+)\s*\[(?!\[|\(|\/|\\)([^\]"\n]*[():\u002c][^\]"\n]*)\]/g, function(match, id, label) {
                 if (/^\s*$/.test(label)) return match;
                 return id + '["' + label.trim().replace(/"/g, '&quot;') + '"]';
             });
@@ -596,7 +623,8 @@
         // Brackets opened but never closed (e.g. `A[Start --> B`).
         // Only the last unclosed label segment on a line is repaired, and only when
         // it would otherwise run to end-of-line.
-        function repairUnclosedBrackets(code) {
+        function repairUnclosedBrackets(code, family) {
+            if (family !== 'flowchart') return { code: code, changed: false };
             var before = code;
             code = code.split('\n').map(function(line) {
                 var trimmed = line.trim();
@@ -627,8 +655,8 @@
             return n;
         }
 
-        function repairSubgraphs(code) {
-            if (mermaidFamily(code) !== 'flowchart') return { code: code, changed: false };
+        function repairSubgraphs(code, family) {
+            if (family !== 'flowchart') return { code: code, changed: false };
             var opens = countTokens(code, 'subgraph');
             var ends = countTokens(code, 'end');
             if (opens <= ends) return { code: code, changed: false };
@@ -637,9 +665,9 @@
             return { code: out, changed: true, note: 'closed ' + (opens - ends) + ' unclosed subgraph' + (opens - ends > 1 ? 's' : '') };
         }
 
-        // Unbalanced principle: odd number of double quotes on a line.
-        function repairUnbalancedQuotes(code) {
-            var before = code;
+        // Unbalanced quotes: odd number of double quotes on a flowchart line.
+        function repairUnbalancedQuotes(code, family) {
+            if (family !== 'flowchart') return { code: code, changed: false };
             var lines = code.split('\n');
             var fixed = 0;
             for (var i = 0; i < lines.length; i++) {
@@ -651,8 +679,9 @@
             return { code: lines.join('\n'), changed: fixed > 0, note: fixed ? 'balanced ' + fixed + ' unterminated quote' + (fixed > 1 ? 's' : '') : '' };
         }
 
-        // A diagram header other than `graph`: ensure the family keyword is on its own line.
-        function repairHeaderSpacing(code) {
+        // Normalize flowchart/graph header spacing (e.g. flowchartTD -> flowchart TD).
+        function repairHeaderSpacing(code, family) {
+            if (family !== 'flowchart') return { code: code, changed: false };
             var before = code;
             code = code.replace(/^(flowchart|graph)\s*(TD|TB|BT|LR|RL)\b/i, function(m, kind, dir) {
                 return kind.toLowerCase() + ' ' + dir.toUpperCase();
@@ -660,15 +689,16 @@
             return { code: code, changed: code !== before };
         }
 
-        function repairCaseKeywords(code) {
+        function repairCaseKeywords(code, family) {
+            if (family !== 'flowchart') return { code: code, changed: false };
             var before = code;
             code = code.replace(/^flowchart\b/i, 'flowchart').replace(/^graph\b/i, 'graph');
             return { code: code, changed: code !== before };
         }
 
         // Unquoted edge labels containing spaces: A -- Hello World --> B
-        function repairEdgeLabels(code) {
-            if (mermaidFamily(code) !== 'flowchart') return { code: code, changed: false };
+        function repairEdgeLabels(code, family) {
+            if (family !== 'flowchart') return { code: code, changed: false };
             var before = code;
             code = code.replace(/\s--\s+([A-Za-z0-9][^|\n"<>-]*?\s+[^|\n"<>-]*?)\s+-->/g, function(m, label) {
                 return ' -- "' + label.trim() + '" -->';
@@ -690,6 +720,7 @@
             }
             code = code.replace(/^\s*```[a-zA-Z0-9_-]*\s*\n?/gm, '').replace(/\n?\s*```\s*$/gm, '');
 
+            var family = mermaidFamily(code);
             var steps = [
                 ['normalised quotes and dashes', repairUnicode],
                 ['fixed malformed arrows', repairArrows],
@@ -702,12 +733,11 @@
                 ['quoted edge labels', repairEdgeLabels]
             ];
 
-            var family = mermaidFamily(code);
             steps.forEach(function(step) {
-                var res = step[1](code);
+                var res = step[1](code, family);
                 if (res && res.changed) {
                     code = res.code;
-                    notes.push(res.note ? step[1].name + ': ' + res.note : step[0]);
+                    notes.push(res.note || step[0]);
                 }
             });
 
@@ -729,23 +759,22 @@
             };
         }
 
-        // Backwards-compatible shim used by the Studio buttons.
-        function autoFixSyntax(rawCode) {
-            return autoFixSyntaxDetailed(rawCode).code;
-        }
-
         // Run the fixer on the Studio editor and report the repairs that were applied.
         function applyAutoFixAndReport() {
             if (!codeEditor) return;
-            var res = autoFixSyntaxDetailed(codeEditor.value);
+            var before = codeEditor.value;
+            var res = autoFixSyntaxDetailed(before);
             if (!res.changed) {
                 setStatus(true, 'No syntax problems found — nothing to fix');
                 return;
             }
+            lastCodeBeforeAutoFix = before;
             codeEditor.value = res.code;
             var summary = res.notes.length ? res.notes.join('; ') : 'applied syntax repairs';
-            setStatus(true, 'Auto-fixed: ' + summary);
+            if (undoFixBtn) undoFixBtn.style.display = 'inline-flex';
             renderCurrentCode();
+            setStatus(true, 'Auto-fixed: ' + summary);
+            if (ui && ui.showStatus) ui.showStatus('✓ Auto-fixed: ' + summary, 3500);
         }
 
         // ==========================================
@@ -1129,7 +1158,8 @@
                 svg += '    <text x="16" y="28" font-size="11" font-weight="600" fill="' + textSecondary + '" letter-spacing="0.04em">' + escapeHtml(item.label.toUpperCase()) + '</text>\n';
                 svg += '    <text x="16" y="60" font-size="24" font-weight="800" fill="' + textPrimary + '">' + escapeHtml(item.value) + '</text>\n';
                 if (item.delta) {
-                    svg += '    <rect x="16" y="72" width="105" height="20" rx="6" fill="' + item.color + '" fill-opacity="0.18" stroke="' + item.color + '" stroke-opacity="0.4"/>\n';
+                    var pillW = Math.min(Math.max(48, Math.round(item.delta.length * 6.5 + 16)), Math.max(48, kpiW - 32));
+                    svg += '    <rect x="16" y="72" width="' + pillW + '" height="20" rx="6" fill="' + item.color + '" fill-opacity="0.18" stroke="' + item.color + '" stroke-opacity="0.4"/>\n';
                     svg += '    <text x="22" y="86" font-size="10" font-weight="700" fill="' + item.color + '">' + escapeHtml(item.delta) + '</text>\n';
                 }
                 svg += '  </g>\n';
@@ -1151,7 +1181,7 @@
                 svg += '    <rect width="' + stepW + '" height="' + stepH + '" rx="14" fill="' + cardBg + '" stroke="' + cardBorder + '" stroke-width="1.2"/>\n';
                 svg += '    <path d="M 0 14 Q 0 0 14 0 L ' + (stepW - 14) + ' 0 Q ' + stepW + ' 0 ' + stepW + ' 14 L ' + stepW + ' 6 L 0 6 Z" fill="' + st.color + '"/>\n';
                 svg += '    <circle cx="28" cy="38" r="14" fill="' + st.color + '" fill-opacity="0.2" stroke="' + st.color + '" stroke-width="1.5"/>\n';
-                svg += '    <text x="28" y="42" font-size="12" font-weight="800" fill="' + st.color + '" text-anchor="middle">0' + (sIdx + 1) + '</text>\n';
+                svg += '    <text x="28" y="42" font-size="12" font-weight="800" fill="' + st.color + '" text-anchor="middle">' + String(sIdx + 1).padStart(2, '0') + '</text>\n';
                 svg += '    <text x="16" y="82" font-size="14" font-weight="700" fill="' + textPrimary + '">' + escapeHtml(st.title) + '</text>\n';
 
                 var descWords = st.desc.split(' ');
@@ -1246,10 +1276,18 @@
             var converted = (typeof ui.convertDataUri === 'function') ? ui.convertDataUri(dataUri) : dataUri;
 
             var w = 720, h = 540;
-            var matchW = svgString.match(/width="(\\d+)"/);
-            var matchH = svgString.match(/height="(\\d+)"/);
-            if (matchW) w = parseInt(matchW[1], 10);
-            if (matchH) h = parseInt(matchH[1], 10);
+            var matchW = svgString.match(/\bwidth="(\d+(?:\.\d+)?)(?:px)?"/i);
+            var matchH = svgString.match(/\bheight="(\d+(?:\.\d+)?)(?:px)?"/i);
+            if (matchW && matchH) {
+                w = Math.round(parseFloat(matchW[1]));
+                h = Math.round(parseFloat(matchH[1]));
+            } else {
+                var matchVb = svgString.match(/\bviewBox="[^"]*?(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s*"/i);
+                if (matchVb) {
+                    w = Math.round(parseFloat(matchVb[1]));
+                    h = Math.round(parseFloat(matchVb[2]));
+                }
+            }
 
             graph.getModel().beginUpdate();
             try {
@@ -1322,10 +1360,15 @@
             if (event.data.type === 'MERMAID_SYNC' && typeof event.data.syntax === 'string') {
                 applyMermaidToCanvas(event.data.syntax);
             } else if (event.data.type === 'MERMAID_EDITOR_READY') {
-                var code = getSelectedMermaidText();
+                postThemeToVisualEditor();
+                var code = pendingVisualEditorCode || getSelectedMermaidText();
+                pendingVisualEditorCode = null;
                 if (code && editorIframe && editorIframe.contentWindow) {
                     editorIframe.contentWindow.postMessage({ type: 'LOAD_MERMAID', syntax: code }, '*');
                 }
+            } else if (event.data.type === 'OPEN_IN_STUDIO' && typeof event.data.syntax === 'string') {
+                if (visualEditorWindow) visualEditorWindow.hide();
+                openUniversalStudio(event.data.syntax);
             }
         });
 
@@ -1334,34 +1377,36 @@
         // ==========================================
         function openVisualMermaidEditor(initialCode) {
             activeTargetCell = graph.getSelectionCell();
+            pendingVisualEditorCode = initialCode || getSelectedMermaidText() || null;
 
             if (visualEditorWindow != null) {
                 visualEditorWindow.show();
-                if (initialCode && editorIframe && editorIframe.contentWindow) {
-                    editorIframe.contentWindow.postMessage({ type: 'LOAD_MERMAID', syntax: initialCode }, '*');
+                postThemeToVisualEditor();
+                if (pendingVisualEditorCode && editorIframe && editorIframe.contentWindow) {
+                    editorIframe.contentWindow.postMessage({ type: 'LOAD_MERMAID', syntax: pendingVisualEditorCode }, '*');
+                    pendingVisualEditorCode = null;
                 }
                 return;
             }
 
-            var isDark = isDarkMode();
             var container = document.createElement('div');
             container.style.position = 'relative';
             container.style.width = '100%';
             container.style.height = '100%';
             container.style.display = 'flex';
             container.style.flexDirection = 'column';
-            container.style.background = isDark ? '#0f172a' : '#f8fafc';
+            container.style.background = 'var(--ms-surface)';
             container.style.overflow = 'hidden';
 
             var controlBar = document.createElement('div');
             controlBar.style.height = '42px';
-            controlBar.style.background = isDark ? '#1e293b' : '#f8fafc';
+            controlBar.style.background = 'var(--ms-surface)';
             controlBar.style.display = 'flex';
             controlBar.style.alignItems = 'center';
             controlBar.style.justifyContent = 'space-between';
             controlBar.style.padding = '0 14px';
-            controlBar.style.borderBottom = isDark ? '1px solid #334155' : '1px solid #e2e8f0';
-            controlBar.style.color = isDark ? '#f8fafc' : '#0f172a';
+            controlBar.style.borderBottom = '1px solid var(--ms-border)';
+            controlBar.style.color = 'var(--ms-text)';
             controlBar.style.fontSize = '12px';
             controlBar.style.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
 
@@ -1369,7 +1414,7 @@
             titleSpan.style.display = 'flex';
             titleSpan.style.alignItems = 'center';
             titleSpan.style.gap = '8px';
-            titleSpan.innerHTML = '<span style="color:' + (isDark ? '#60a5fa' : '#2563eb') + ';font-weight:700;">⚡ 2-Way Visual Mermaid Editor</span> <span style="color:' + (isDark ? '#94a3b8' : '#64748b') + ';font-size:11px;">(Click shapes or double-click canvas to add nodes • Drag handles to connect • Live .mmd sync)</span>';
+            titleSpan.innerHTML = '<span style="color:var(--ms-accent);font-weight:700;">⚡ 2-Way Visual Mermaid Editor</span> <span style="color:var(--ms-muted);font-size:11px;">(Click shapes or double-click canvas to add nodes • Drag handles to connect • Live .mmd sync)</span>';
             controlBar.appendChild(titleSpan);
 
             var actionsDiv = document.createElement('div');
@@ -1387,7 +1432,9 @@
                         if (clipText && clipText.trim() && editorIframe && editorIframe.contentWindow) {
                             editorIframe.contentWindow.postMessage({ type: 'LOAD_MERMAID', syntax: clipText.trim() }, '*');
                         }
-                    }).catch(function() {});
+                    }).catch(function() {
+                        if (ui.showStatus) ui.showStatus('Clipboard read blocked — paste inside the Import Code dialog', 3000);
+                    });
                 }
             };
             actionsDiv.appendChild(btnPasteCode);
@@ -1441,17 +1488,6 @@
             visualEditorWindow.setResizable(true);
             visualEditorWindow.setClosable(true);
             visualEditorWindow.setVisible(true);
-
-            editorIframe.onload = function() {
-                var code = initialCode || getSelectedMermaidText();
-                if (code) {
-                    setTimeout(function() {
-                        try {
-                            editorIframe.contentWindow.postMessage({ type: 'LOAD_MERMAID', syntax: code }, '*');
-                        } catch (e) {}
-                    }, 400);
-                }
-            };
         }
 
         // ==========================================
@@ -1489,19 +1525,27 @@
             return (data.folders || []).filter(function(f) { return f.id === id; })[0] || null;
         }
 
-        // Extract ```mermaid fenced blocks (or the whole text when it is bare Mermaid).
+        // Extract ```mermaid / ```mmd fenced blocks (or bare fences that begin with a
+        // valid Mermaid diagram header, or the whole text when it is bare Mermaid).
+        var MERMAID_HEADER_RE = /^(flowchart|graph|sequenceDiagram|classDiagram|stateDiagram|erDiagram|journey|gantt|pie|mindmap|timeline|quadrantChart|gitGraph|xychart-beta|sankey-beta|architecture-beta|block-beta|packet-beta|requirementDiagram|C4Context|C4Container|C4Component|C4Dynamic|C4Deployment|radar|spider|infographic)\b/;
+
         function extractMermaidBlocks(text) {
             var out = [];
-            var fenceRe = /```(?:mermaid|mmd)?\s*\n([\s\S]*?)```/gi;
+            var fenceRe = /```([a-zA-Z0-9_-]*)[ \t]*\r?\n([\s\S]*?)```/g;
             var m;
             while ((m = fenceRe.exec(text)) !== null) {
-                var body = m[1].trim();
-                // A bare fence with no language still only counts when it parses as Mermaid.
-                if (body && (/```mermaid/i.test(m[0]) || !/^#/.test(body))) out.push(body);
+                var lang = (m[1] || '').toLowerCase();
+                var body = m[2].trim();
+                if (!body) continue;
+                if (lang === 'mermaid' || lang === 'mmd') {
+                    out.push(body);
+                } else if (lang === '' && MERMAID_HEADER_RE.test(body)) {
+                    out.push(body);
+                }
             }
             if (out.length === 0) {
                 var stripped = text.trim().replace(/^---[\s\S]*?---\s*/, '');
-                if (/^(flowchart|graph|sequenceDiagram|classDiagram|stateDiagram|erDiagram|journey|gantt|pie|mindmap|timeline|quadrantChart|gitGraph|xychart-beta|sankey-beta|architecture-beta|block-beta|packet-beta|requirementDiagram)\b/.test(stripped)) {
+                if (MERMAID_HEADER_RE.test(stripped)) {
                     out.push(stripped);
                 }
             }
@@ -1703,6 +1747,29 @@
             return ipcRequest({ action: 'mermaidWriteFile', folder: folderPath, name: name, data: data });
         }
 
+        async function ipcDeleteDiskFile(folderPath, name) {
+            return ipcRequest({ action: 'mermaidDeleteFile', folder: folderPath, name: name });
+        }
+
+        async function ipcMakeDiskFolder(folderPath, name) {
+            return ipcRequest({ action: 'mermaidMakeFolder', folder: folderPath, name: name });
+        }
+
+        function sanitizeDiskFileName(title, ext) {
+            var clean = String(title || 'diagram')
+                .replace(/[\\/:*?"<>|\0]/g, '_')
+                .replace(/[\s.]+$/g, '')
+                .trim();
+            if (!clean || /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\.|$)/i.test(clean)) {
+                clean = 'diagram_' + Date.now();
+            }
+            var suffix = ext || '.mmd';
+            if (!new RegExp('\\' + suffix + '$', 'i').test(clean)) {
+                clean = clean + suffix;
+            }
+            return clean;
+        }
+
         // Pick a directory with the native dialog, authorize it persistently and
         // register it as a hub folder backed by real disk access.
         async function addDiskFolder() {
@@ -1736,13 +1803,6 @@
                 return;
             }
 
-            if (diags.length === 0) {
-                if (ui && ui.showError) ui.showError(mxResources.get('error'),
-                    'No Mermaid files found in "' + picked.name + '".\n\nAdd .mmd files or .md files containing ```mermaid blocks.',
-                    mxResources.get('ok'));
-                return;
-            }
-
             if (!existing) {
                 data.folders.push({
                     id: folderId,
@@ -1755,14 +1815,32 @@
             } else {
                 existing.lastScan = Date.now();
             }
+
+            // Preserve starred flags & cached previews if re-adding an existing disk folder
+            var prevById = {};
+            data.diagrams.forEach(function(d) {
+                if (d.folderId === folderId) prevById[d.id] = d;
+            });
+            diags.forEach(function(d) {
+                var prev = prevById[d.id];
+                if (prev) {
+                    d.starred = !!prev.starred;
+                    if (prev.mtime === d.mtime && prev.svgPreview) d.svgPreview = prev.svgPreview;
+                }
+            });
+
             data.diagrams = data.diagrams.filter(function(d) { return d.folderId !== folderId; }).concat(diags);
             saveWorkspaceData(data);
             hubCurrentFolder = folderId;
             hubIsFavorites = false;
             renderHubView();
             if (ui.showStatus) {
-                ui.showStatus('✓ Added "' + picked.name + '" with ' + diags.length + ' Mermaid diagram' +
-                    (diags.length === 1 ? '' : 's'), 3000);
+                if (diags.length === 0) {
+                    ui.showStatus('✓ Added empty folder "' + picked.name + '" — save new diagrams here from Studio', 3500);
+                } else {
+                    ui.showStatus('✓ Added "' + picked.name + '" with ' + diags.length + ' Mermaid diagram' +
+                        (diags.length === 1 ? '' : 's'), 3000);
+                }
             }
         }
 
@@ -1775,25 +1853,34 @@
                 var entry = entries[i];
                 try {
                     var text = await ipcReadDiskFile(folderPath, entry.name);
-                    var blocks = /\.md|\.markdown$/i.test(entry.name) ? extractMermaidBlocks(text) : [String(text).trim()];
+                    var isMd = /\.(md|markdown)$/i.test(entry.name);
+                    var blocks = isMd ? extractMermaidBlocks(text) : [String(text).trim()];
                     blocks = (blocks || []).filter(Boolean);
                     if (blocks.length === 0) continue;
 
-                    diags.push({
-                        id: 'disk_' + folderId + '_' + entry.name.replace(/[^A-Za-z0-9_.-]/g, '_'),
-                        title: titleFromFilename(entry.name),
-                        folderId: folderId,
-                        diskPath: folderPath,
-                        fileName: entry.name,
-                        size: entry.size,
-                        mtime: entry.mtime,
-                        code: blocks[0],
-                        blocks: blocks,
-                        typeLabel: detectDiagramType(blocks[0]).label,
-                        updatedAt: entry.mtime || Date.now(),
-                        starred: false,
-                        fromDisk: true
-                    });
+                    var baseTitle = titleFromFilename(entry.name);
+                    var safeEntryId = entry.name.replace(/[^A-Za-z0-9_.-]/g, '_');
+
+                    for (var bIdx = 0; bIdx < blocks.length; bIdx++) {
+                        var blockCode = blocks[bIdx];
+                        diags.push({
+                            id: 'disk_' + folderId + '_' + safeEntryId + (blocks.length > 1 ? '_b' + bIdx : ''),
+                            title: blocks.length > 1 ? (baseTitle + ' (' + (bIdx + 1) + '/' + blocks.length + ')') : baseTitle,
+                            folderId: folderId,
+                            diskPath: folderPath,
+                            fileName: entry.name,
+                            blockIndex: bIdx,
+                            blockCount: blocks.length,
+                            size: entry.size,
+                            mtime: entry.mtime,
+                            code: blockCode,
+                            blocks: blocks,
+                            typeLabel: detectDiagramType(blockCode).label,
+                            updatedAt: entry.mtime || Date.now(),
+                            starred: false,
+                            fromDisk: true
+                        });
+                    }
                 } catch (e) {} // Skipped unreadable/escaping file
             }
 
@@ -1879,6 +1966,17 @@
                     return;
                 }
                 var fresh = getWorkspaceData();
+                var prevById = {};
+                fresh.diagrams.forEach(function(d) {
+                    if (d.folderId === folderId) prevById[d.id] = d;
+                });
+                diags.forEach(function(d) {
+                    var prev = prevById[d.id];
+                    if (prev) {
+                        d.starred = !!prev.starred;
+                        if (prev.mtime === d.mtime && prev.svgPreview) d.svgPreview = prev.svgPreview;
+                    }
+                });
                 fresh.diagrams = fresh.diagrams.filter(function(d) { return d.folderId !== folderId; }).concat(diags);
                 var f = getFolderById(fresh, folderId);
                 if (f) f.lastScan = Date.now();
@@ -1891,20 +1989,146 @@
             addDiskFolderFallback();
         }
 
+        // Persist a diagram to the workspace AND to disk when targeting a blessed PC folder.
+        async function saveDiagramToFolder(opts) {
+            var data = getWorkspaceData();
+            var targetFolderId = opts.folderId || getDefaultFolderId(data);
+            var folder = getFolderById(data, targetFolderId);
+            var title = (opts.title || 'My Diagram').trim();
+            var code = opts.code || '';
+            var xml = opts.xml || '';
+            var existing = opts.existingDiagram || null;
+            var now = Date.now();
+
+            var diskMeta = null;
+            if (folder && isDiskFolder(folder) && isElectronHost() && folder.diskPath) {
+                var ext = code.trim() ? '.mmd' : '.drawio';
+                var payload = code.trim() ? code : xml;
+                var fileName = (existing && existing.fromDisk && existing.diskPath === folder.diskPath && existing.fileName)
+                    ? existing.fileName
+                    : sanitizeDiskFileName(title, ext);
+
+                // When editing a single block inside a multi-block .md file, preserve surrounding prose
+                if (/\.(md|markdown)$/i.test(fileName) && existing && typeof existing.blockIndex === 'number') {
+                    try {
+                        var origMd = await ipcReadDiskFile(folder.diskPath, fileName);
+                        var idx = 0;
+                        var replaced = origMd.replace(/```([a-zA-Z0-9_-]*)[ \t]*\r?\n([\s\S]*?)```/g, function(full, lang, body) {
+                            var l = (lang || '').toLowerCase();
+                            var isMermaidBlock = (l === 'mermaid' || l === 'mmd' || (l === '' && MERMAID_HEADER_RE.test(body.trim())));
+                            if (!isMermaidBlock) return full;
+                            if (idx++ === existing.blockIndex) {
+                                return '```' + (lang || 'mermaid') + '\n' + code.trim() + '\n```';
+                            }
+                            return full;
+                        });
+                        payload = replaced;
+                    } catch (e) {}
+                }
+
+                await ipcWriteDiskFile(folder.diskPath, fileName, payload);
+                diskMeta = {
+                    fromDisk: true,
+                    diskPath: folder.diskPath,
+                    fileName: fileName,
+                    mtime: now
+                };
+            }
+
+            var fresh = getWorkspaceData();
+            var diagId = existing ? existing.id : (diskMeta
+                ? ('disk_' + targetFolderId + '_' + diskMeta.fileName.replace(/[^A-Za-z0-9_.-]/g, '_'))
+                : ('diag_' + now));
+
+            var entry = {
+                id: diagId,
+                title: title,
+                folderId: targetFolderId,
+                code: code,
+                xml: xml,
+                typeLabel: opts.typeLabel || (code ? detectDiagramType(code).label : 'Draw.io Diagram'),
+                svgPreview: opts.svgPreview || STARTER_SVGS.flowchart,
+                updatedAt: now,
+                starred: existing ? !!existing.starred : false
+            };
+            if (diskMeta) {
+                entry.fromDisk = true;
+                entry.diskPath = diskMeta.diskPath;
+                entry.fileName = diskMeta.fileName;
+                entry.mtime = diskMeta.mtime;
+                if (existing && typeof existing.blockIndex === 'number') {
+                    entry.blockIndex = existing.blockIndex;
+                    entry.blockCount = existing.blockCount;
+                }
+            }
+
+            var existingIdx = fresh.diagrams.findIndex(function(item) { return item.id === diagId; });
+            if (existingIdx >= 0) {
+                fresh.diagrams[existingIdx] = entry;
+            } else {
+                fresh.diagrams.unshift(entry);
+            }
+            saveWorkspaceData(fresh);
+
+            return {
+                diagram: entry,
+                folderName: (folder && folder.name) || 'Personal',
+                savedToDisk: !!diskMeta,
+                fileName: diskMeta ? diskMeta.fileName : null
+            };
+        }
+
+        function deleteDiagramFromHub(d) {
+            var isDiskBacked = !!(d.fromDisk && d.diskPath && d.fileName && isElectronHost());
+            var msg = isDiskBacked
+                ? 'Delete "' + d.title + '" from the hub AND permanently delete "' + d.fileName + '" on disk? This cannot be undone.'
+                : 'Delete "' + d.title + '" from the workspace? This cannot be undone.';
+            appConfirm('Delete diagram', msg).then(async function(ok) {
+                if (!ok) return;
+                if (isDiskBacked) {
+                    try {
+                        await ipcDeleteDiskFile(d.diskPath, d.fileName);
+                    } catch (e) {
+                        if (ui && ui.showError) ui.showError(mxResources.get('error'), 'Could not delete file on disk: ' + (e.message || e), mxResources.get('ok'));
+                        return;
+                    }
+                }
+                var fresh = getWorkspaceData();
+                fresh.diagrams = fresh.diagrams.filter(function(item) {
+                    if (isDiskBacked) {
+                        return !(item.diskPath === d.diskPath && item.fileName === d.fileName);
+                    }
+                    return item.id !== d.id;
+                });
+                saveWorkspaceData(fresh);
+                renderHubView();
+                if (ui && ui.showStatus) {
+                    ui.showStatus(isDiskBacked ? ('✓ Deleted "' + d.fileName + '" from disk') : '✓ Deleted diagram', 2500);
+                }
+            });
+        }
+
         // ==========================================
         // 11. DIAGRAMS & FOLDERS WORKSPACE HUB MODAL
         // ==========================================
         function openDiagramsHub() {
             var isDark = isDarkMode();
+            var themeKey = isDark ? 'dark' : 'light';
 
             if (hubModal != null) {
-                hubModal.style.display = 'flex';
-                renderHubView();
-                return;
+                if (hubModal.dataset.theme !== themeKey) {
+                    hubModal.remove();
+                    hubModal = null;
+                } else {
+                    hubModal.style.display = 'flex';
+                    renderHubView();
+                    return;
+                }
             }
 
             // Create Hub Backdrop
             hubModal = document.createElement('div');
+            hubModal.dataset.theme = themeKey;
             hubModal.id = 'diagrams-hub-modal';
             hubModal.style.position = 'fixed';
             hubModal.style.inset = '0';
@@ -1999,7 +2223,10 @@
             searchInput.style.marginBottom = '14px';
             searchInput.oninput = function() {
                 hubSearchQuery = searchInput.value.trim();
-                renderHubGallery();
+                if (hubSearchDebounceTimer) clearTimeout(hubSearchDebounceTimer);
+                hubSearchDebounceTimer = setTimeout(function() {
+                    renderHubGallery();
+                }, 150);
             };
             hubSidebar.appendChild(searchInput);
 
@@ -2090,21 +2317,23 @@
                 var data = getWorkspaceData();
                 // Prefer the folder currently open in the hub; otherwise the configured default.
                 var targetFolder = (hubCurrentFolder && hubCurrentFolder !== 'all') ? hubCurrentFolder : getDefaultFolderId(data);
-                var newDiag = {
-                    id: 'diag_' + Date.now(),
+                saveDiagramToFolder({
                     title: title.trim(),
                     folderId: targetFolder,
                     code: code,
                     xml: xml,
                     typeLabel: code ? detectDiagramType(code).label : 'Draw.io Diagram',
-                    svgPreview: svgStr || STARTER_SVGS.flowchart,
-                    updatedAt: Date.now(),
-                    starred: false
-                };
-                data.diagrams.unshift(newDiag);
-                saveWorkspaceData(data);
-                renderHubView();
-                if (ui.showStatus) ui.showStatus('✓ Saved canvas diagram to folder', 2500);
+                    svgPreview: svgStr || STARTER_SVGS.flowchart
+                }).then(function(res) {
+                    renderHubView();
+                    if (ui.showStatus) {
+                        ui.showStatus(res.savedToDisk
+                            ? ('✓ Saved "' + res.fileName + '" to disk folder "' + res.folderName + '"')
+                            : ('✓ Saved canvas diagram to "' + res.folderName + '"'), 2500);
+                    }
+                }).catch(function(err) {
+                    if (ui && ui.showError) ui.showError(mxResources.get('error'), 'Could not save to disk: ' + (err.message || err), mxResources.get('ok'));
+                });
                 });
             };
             mainActions.appendChild(btnSaveCanvas);
@@ -2295,9 +2524,10 @@
                 e.stopPropagation();
                 appPrompt('New folder', '', 'Create an organized folder for your diagrams.').then(function(fName) {
                     if (!fName) return;
+                    var fresh = getWorkspaceData();
                     var nId = 'folder_' + Date.now();
-                    data.folders.push({ id: nId, name: fName, icon: '📁' });
-                    saveWorkspaceData(data);
+                    fresh.folders.push({ id: nId, name: fName, icon: '📁' });
+                    saveWorkspaceData(fresh);
                     hubCurrentFolder = nId;
                     hubIsFavorites = false;
                     renderHubView();
@@ -2381,14 +2611,15 @@
                             ? 'Remove "' + folder.name + '" from the hub? The files on disk are NOT deleted.'
                             : 'Delete folder "' + folder.name + '"? Diagrams inside it will be moved to Personal.').then(function(ok) {
                             if (!ok) return;
-                            data.folders = data.folders.filter(function(f) { return f.id !== folder.id; });
+                            var fresh = getWorkspaceData();
+                            fresh.folders = fresh.folders.filter(function(f) { return f.id !== folder.id; });
                             if (isDiskFolder(folder)) {
-                                data.diagrams = data.diagrams.filter(function(d) { return d.folderId !== folder.id; });
+                                fresh.diagrams = fresh.diagrams.filter(function(d) { return d.folderId !== folder.id; });
                             } else {
-                                data.diagrams.forEach(function(d) { if (d.folderId === folder.id) d.folderId = 'personal'; });
+                                fresh.diagrams.forEach(function(d) { if (d.folderId === folder.id) d.folderId = 'personal'; });
                             }
-                            if (data.settings && data.settings.defaultFolderId === folder.id) data.settings.defaultFolderId = 'personal';
-                            saveWorkspaceData(data);
+                            if (fresh.settings && fresh.settings.defaultFolderId === folder.id) fresh.settings.defaultFolderId = 'personal';
+                            saveWorkspaceData(fresh);
                             if (hubCurrentFolder === folder.id) hubCurrentFolder = 'all';
                             renderHubView();
                         });
@@ -2574,8 +2805,12 @@
                     starBtn.style.fontSize = '14px';
                     starBtn.onclick = function(ev) {
                         ev.stopPropagation();
-                        d.starred = !d.starred;
-                        saveWorkspaceData(data);
+                        var fresh = getWorkspaceData();
+                        var target = fresh.diagrams.find(function(item) { return item.id === d.id; });
+                        if (target) {
+                            target.starred = !target.starred;
+                            saveWorkspaceData(fresh);
+                        }
                         renderHubView();
                     };
                     previewBox.appendChild(starBtn);
@@ -2635,9 +2870,13 @@
                     });
 
                     folderSelect.onchange = function() {
-                        d.folderId = folderSelect.value;
-                        d.updatedAt = Date.now();
-                        saveWorkspaceData(data);
+                        var fresh = getWorkspaceData();
+                        var target = fresh.diagrams.find(function(item) { return item.id === d.id; });
+                        if (target) {
+                            target.folderId = folderSelect.value;
+                            target.updatedAt = Date.now();
+                            saveWorkspaceData(fresh);
+                        }
                         renderHubView();
                     };
                     metaBody.appendChild(folderSelect);
@@ -2668,7 +2907,7 @@
                     btnEdit.textContent = 'Edit in Studio';
                     btnEdit.onclick = function() {
                         hubModal.style.display = 'none';
-                        openUniversalStudio(d.code || TEMPLATES.flowchart);
+                        openUniversalStudio(d.code || TEMPLATES.flowchart, d);
                     };
                     actionsBar.appendChild(btnEdit);
 
@@ -2680,12 +2919,7 @@
                     btnDel.innerHTML = '🗑️';
                     btnDel.title = 'Delete Diagram';
                     btnDel.onclick = function() {
-                        appConfirm('Delete diagram', 'Delete "' + d.title + '" from the workspace? This cannot be undone.').then(function(ok) {
-                            if (!ok) return;
-                            data.diagrams = data.diagrams.filter(function(item) { return item.id !== d.id; });
-                            saveWorkspaceData(data);
-                            renderHubView();
-                        });
+                        deleteDiagramFromHub(d);
                     };
                     actionsBar.appendChild(btnDel);
 
@@ -2760,15 +2994,10 @@
                     btns[0].onclick = function() { openDiagramOnCanvas(d); };
                     btns[1].onclick = function() {
                         hubModal.style.display = 'none';
-                        openUniversalStudio(d.code || TEMPLATES.flowchart);
+                        openUniversalStudio(d.code || TEMPLATES.flowchart, d);
                     };
                     btns[2].onclick = function() {
-                        appConfirm('Delete diagram', 'Delete "' + d.title + '" from the workspace? This cannot be undone.').then(function(ok) {
-                            if (!ok) return;
-                            data.diagrams = data.diagrams.filter(function(item) { return item.id !== d.id; });
-                            saveWorkspaceData(data);
-                            renderHubView();
-                        });
+                        deleteDiagramFromHub(d);
                     };
                     tr.appendChild(tdActions);
 
@@ -2833,16 +3062,25 @@
             }
         }
 
-        function renderCurrentCode() {
+        function renderCurrentCode(onDone) {
             if (!codeEditor) return;
+            if (renderDebounceTimer) {
+                clearTimeout(renderDebounceTimer);
+                renderDebounceTimer = null;
+            }
+            var seq = ++renderSeq;
             var raw = codeEditor.value;
             var trimmed = raw.trim();
 
             if (!trimmed) {
                 currentDetectedType = { id: 'empty', label: 'Waiting for Code...' };
+                currentRenderedSvg = '';
+                currentRenderedXml = '';
+                currentRenderedSource = '';
                 if (autoDetectBadge) autoDetectBadge.textContent = 'Auto-Detected: Waiting for Code...';
                 if (previewInner) previewInner.innerHTML = '<div style="color:#64748b;font-size:14px;text-align:center;padding:40px;">Paste or type diagram code on the left to auto-detect and render preview.</div>';
                 setStatus(true, 'Ready');
+                if (onDone) onDone();
                 return;
             }
 
@@ -2868,11 +3106,13 @@
                     var radarSvg = renderRadarSvg(codeToRender, bgMode === 1);
                     currentRenderedSvg = radarSvg;
                     currentRenderedXml = '';
+                    currentRenderedSource = codeToRender;
                     if (previewInner) previewInner.innerHTML = radarSvg;
                     setStatus(true, 'Rendered high-precision Radar / Spider web chart');
                 } catch (e) {
                     setStatus(false, 'Radar parse error: ' + (e.message || e));
                 }
+                if (onDone) onDone();
                 return;
             }
 
@@ -2882,11 +3122,13 @@
                     var infoSvg = renderInfographicSvg(codeToRender, bgMode === 1);
                     currentRenderedSvg = infoSvg;
                     currentRenderedXml = '';
+                    currentRenderedSource = codeToRender;
                     if (previewInner) previewInner.innerHTML = infoSvg;
                     setStatus(true, 'Rendered publication-grade Infographic card');
                 } catch (e) {
                     setStatus(false, 'Infographic parse error: ' + (e.message || e));
                 }
+                if (onDone) onDone();
                 return;
             }
 
@@ -2894,7 +3136,9 @@
             if (detected.id === 'plantuml') {
                 if (typeof ui.parsePlantUmlDiagram === 'function') {
                     ui.parsePlantUmlDiagram(codeToRender, null, function(xml) {
+                        if (seq !== renderSeq) return;
                         currentRenderedXml = xml;
+                        currentRenderedSource = codeToRender;
                         try {
                             var svgNode = ui.getSvgForXml(xml, 20, previewTheme);
                             if (svgNode) {
@@ -2906,15 +3150,20 @@
                                     previewInner.innerHTML = resolvedSvgP;
                                 }
                                 setStatus(true, 'Rendered PlantUML diagram');
+                                if (onDone) onDone();
                                 return;
                             }
                         } catch (e) {}
                         setStatus(false, 'PlantUML SVG conversion failed');
+                        if (onDone) onDone();
                     }, function(err) {
+                        if (seq !== renderSeq) return;
                         setStatus(false, 'PlantUML syntax error: ' + (err ? (err.message || err) : 'Check syntax'));
+                        if (onDone) onDone();
                     });
                 } else {
                     setStatus(false, 'PlantUML engine not available in this build');
+                    if (onDone) onDone();
                 }
                 return;
             }
@@ -2922,7 +3171,9 @@
             // Engine D: All Mermaid Diagrams (Requirement 5 Contrast Fix)
             if (typeof ui.parseMermaidDiagram === 'function') {
                 ui.parseMermaidDiagram(codeToRender, null, function(xml) {
+                    if (seq !== renderSeq) return;
                     currentRenderedXml = xml;
+                    currentRenderedSource = codeToRender;
                     try {
                         var svgNode = ui.getSvgForXml(xml, 20, previewTheme);
                         if (svgNode) {
@@ -2934,41 +3185,59 @@
                                 previewInner.innerHTML = resolvedSvgM;
                             }
                             setStatus(true, 'Rendered ' + detected.label + ' successfully');
+                            if (onDone) onDone();
                             return;
                         }
                     } catch (e) {
                         console.warn('SVG render error:', e);
                     }
                     setStatus(false, 'Could not produce SVG from diagram XML');
+                    if (onDone) onDone();
                 }, function(err) {
+                    if (seq !== renderSeq) return;
                     var msg = err ? (err.message || String(err)) : 'Syntax error in Mermaid code';
                     setStatus(false, msg);
+                    if (onDone) onDone();
                 });
                 return;
             }
 
             setStatus(false, 'Draw.io Mermaid parser is initializing, please wait...');
+            if (onDone) onDone();
         }
 
         function triggerDebouncedRender() {
             if (renderDebounceTimer) clearTimeout(renderDebounceTimer);
-            renderDebounceTimer = setTimeout(renderCurrentCode, 250);
+            renderDebounceTimer = setTimeout(function() {
+                renderDebounceTimer = null;
+                renderCurrentCode();
+            }, 250);
         }
 
-        function openUniversalStudio(initialCode) {
+        function openUniversalStudio(initialCode, diagramMeta) {
             var isDark = isDarkMode();
+            var themeKey = isDark ? 'dark' : 'light';
+            activeEditingDiagram = diagramMeta || null;
+            lastCodeBeforeAutoFix = null;
 
             if (studioModal != null) {
-                studioModal.style.display = 'flex';
-                if (initialCode && codeEditor) {
-                    codeEditor.value = initialCode;
-                    renderCurrentCode();
+                if (studioModal.dataset.theme !== themeKey) {
+                    studioModal.remove();
+                    studioModal = null;
+                } else {
+                    studioModal.style.display = 'flex';
+                    if (undoFixBtn) undoFixBtn.style.display = 'none';
+                    if (initialCode && codeEditor) {
+                        codeEditor.value = initialCode;
+                        renderCurrentCode();
+                    }
+                    return;
                 }
-                return;
             }
 
             // Create Backdrop Modal Overlay
             studioModal = document.createElement('div');
+            studioModal.dataset.theme = themeKey;
             studioModal.id = 'universal-studio-modal';
             studioModal.style.position = 'fixed';
             studioModal.style.inset = '0';
@@ -3205,15 +3474,10 @@
                             renderCurrentCode();
                         }
                     }).catch(function() {
-                        try {
-                            var electron = require('electron');
-                            var clipText = electron.clipboard.readText();
-                            if (codeEditor && clipText) {
-                                codeEditor.value = clipText;
-                                renderCurrentCode();
-                            }
-                        } catch (e) {}
+                        setStatus(false, 'Clipboard access blocked — click the editor and press Ctrl+V to paste');
                     });
+                } else {
+                    setStatus(false, 'Click the editor and press Ctrl+V to paste');
                 }
             };
             tbLeft.appendChild(pasteBtn);
@@ -3391,6 +3655,33 @@
             codeEditor.placeholder = 'Paste any Mermaid, Flowchart, Mindmap, Radar/Spider, Infographic, or PlantUML code here...';
             codeEditor.oninput = triggerDebouncedRender;
             codeEditor.onpaste = function() { setTimeout(triggerDebouncedRender, 50); };
+            codeEditor.addEventListener('keydown', function(e) {
+                if (e.key === 'Tab') {
+                    e.preventDefault();
+                    var start = codeEditor.selectionStart;
+                    var end = codeEditor.selectionEnd;
+                    var val = codeEditor.value;
+                    if (e.shiftKey) {
+                        var lineStart = val.lastIndexOf('\n', start - 1) + 1;
+                        if (val.slice(lineStart, lineStart + 2) === '  ') {
+                            codeEditor.value = val.slice(0, lineStart) + val.slice(lineStart + 2);
+                            codeEditor.selectionStart = Math.max(lineStart, start - 2);
+                            codeEditor.selectionEnd = Math.max(lineStart, end - 2);
+                            triggerDebouncedRender();
+                        }
+                    } else {
+                        codeEditor.value = val.slice(0, start) + '  ' + val.slice(end);
+                        codeEditor.selectionStart = codeEditor.selectionEnd = start + 2;
+                        triggerDebouncedRender();
+                    }
+                } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                    e.preventDefault();
+                    if (btnInsertEditable) btnInsertEditable.click();
+                } else if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+                    e.preventDefault();
+                    if (btnSaveHub) btnSaveHub.click();
+                }
+            });
             studioLeftPane.appendChild(codeEditor);
 
             // Left status bar
@@ -3401,11 +3692,39 @@
             statusContainer.style.display = 'flex';
             statusContainer.style.alignItems = 'center';
             statusContainer.style.justifyContent = 'space-between';
+            statusContainer.style.gap = '6px';
             statusContainer.style.fontSize = '11px';
 
             statusBar = document.createElement('div');
             statusBar.innerHTML = '<span style="color:#10b981;">✓ Ready</span>';
             statusContainer.appendChild(statusBar);
+
+            var statusBtnGroup = document.createElement('div');
+            statusBtnGroup.style.display = 'flex';
+            statusBtnGroup.style.alignItems = 'center';
+            statusBtnGroup.style.gap = '6px';
+
+            undoFixBtn = document.createElement('button');
+            undoFixBtn.textContent = '↶ Undo Auto-Fix';
+            undoFixBtn.style.display = 'none';
+            undoFixBtn.style.background = isDark ? '#1e293b' : '#ffffff';
+            undoFixBtn.style.color = isDark ? '#e2e8f0' : '#334155';
+            undoFixBtn.style.border = isDark ? '1px solid #475569' : '1px solid #cbd5e1';
+            undoFixBtn.style.borderRadius = '4px';
+            undoFixBtn.style.padding = '2px 8px';
+            undoFixBtn.style.fontSize = '10px';
+            undoFixBtn.style.fontWeight = '600';
+            undoFixBtn.style.cursor = 'pointer';
+            undoFixBtn.onclick = function() {
+                if (lastCodeBeforeAutoFix != null && codeEditor) {
+                    codeEditor.value = lastCodeBeforeAutoFix;
+                    lastCodeBeforeAutoFix = null;
+                    undoFixBtn.style.display = 'none';
+                    renderCurrentCode();
+                    setStatus(true, 'Reverted Auto-Fix changes');
+                }
+            };
+            statusBtnGroup.appendChild(undoFixBtn);
 
             quickFixBtn = document.createElement('button');
             quickFixBtn.textContent = 'Auto-Fix Now';
@@ -3421,7 +3740,9 @@
             quickFixBtn.onclick = function() {
                 applyAutoFixAndReport();
             };
-            statusContainer.appendChild(quickFixBtn);
+            statusBtnGroup.appendChild(quickFixBtn);
+
+            statusContainer.appendChild(statusBtnGroup);
 
             studioLeftPane.appendChild(statusContainer);
             splitPane.appendChild(studioLeftPane);
@@ -3446,35 +3767,34 @@
             splitterResizer.onmouseenter = function() { splitterResizer.style.background = '#3b82f6'; };
             splitterResizer.onmouseleave = function() { splitterResizer.style.background = isDark ? '#1e293b' : '#e2e8f0'; };
 
-            // Drag handling for Splitter
-            var isDraggingSplitter = false;
+            // Drag handling for Splitter (attach window listeners only during active drag)
             splitterResizer.addEventListener('mousedown', function(e) {
-                if (e.button === 0) {
-                    isDraggingSplitter = true;
-                    document.body.style.cursor = 'col-resize';
-                    document.body.style.userSelect = 'none';
-                    e.preventDefault();
-                }
-            });
+                if (e.button !== 0) return;
+                document.body.style.cursor = 'col-resize';
+                document.body.style.userSelect = 'none';
+                e.preventDefault();
 
-            window.addEventListener('mousemove', function(e) {
-                if (!isDraggingSplitter || !studioBoxEl) return;
-                var boxRect = studioBoxEl.getBoundingClientRect();
-                var newW = e.clientX - boxRect.left;
-                var minW = 180;
-                var maxW = boxRect.width * 0.75;
-                if (newW >= minW && newW <= maxW) {
-                    studioLeftPane.style.width = newW + 'px';
-                    lastResizedEditorWidth = newW;
+                function onSplitterMove(ev) {
+                    if (!studioBoxEl) return;
+                    var boxRect = studioBoxEl.getBoundingClientRect();
+                    var newW = ev.clientX - boxRect.left;
+                    var minW = 180;
+                    var maxW = boxRect.width * 0.75;
+                    if (newW >= minW && newW <= maxW) {
+                        studioLeftPane.style.width = newW + 'px';
+                        lastResizedEditorWidth = newW;
+                    }
                 }
-            });
 
-            window.addEventListener('mouseup', function() {
-                if (isDraggingSplitter) {
-                    isDraggingSplitter = false;
+                function onSplitterUp() {
                     document.body.style.cursor = '';
                     document.body.style.userSelect = '';
+                    window.removeEventListener('mousemove', onSplitterMove);
+                    window.removeEventListener('mouseup', onSplitterUp);
                 }
+
+                window.addEventListener('mousemove', onSplitterMove);
+                window.addEventListener('mouseup', onSplitterUp);
             });
 
             splitPane.appendChild(splitterResizer);
@@ -3537,28 +3857,28 @@
             previewInner.style.justifyContent = 'center';
             previewContainer.appendChild(previewInner);
 
-            // Pan and Zoom Listeners
-            var isPanning = false, panStartX = 0, panStartY = 0;
+            // Pan and Zoom Listeners (attach window listeners only during active pan)
             previewContainer.addEventListener('mousedown', function(e) {
-                if (e.button === 0) {
-                    isPanning = true;
-                    previewContainer.style.cursor = 'grabbing';
-                    panStartX = e.clientX - panOffsetX;
-                    panStartY = e.clientY - panOffsetY;
-                    e.preventDefault();
+                if (e.button !== 0) return;
+                previewContainer.style.cursor = 'grabbing';
+                var panStartX = e.clientX - panOffsetX;
+                var panStartY = e.clientY - panOffsetY;
+                e.preventDefault();
+
+                function onPanMove(ev) {
+                    panOffsetX = ev.clientX - panStartX;
+                    panOffsetY = ev.clientY - panStartY;
+                    updateTransform();
                 }
-            });
-            window.addEventListener('mousemove', function(e) {
-                if (!isPanning) return;
-                panOffsetX = e.clientX - panStartX;
-                panOffsetY = e.clientY - panStartY;
-                updateTransform();
-            });
-            window.addEventListener('mouseup', function() {
-                if (isPanning) {
-                    isPanning = false;
+
+                function onPanUp() {
                     previewContainer.style.cursor = 'grab';
+                    window.removeEventListener('mousemove', onPanMove);
+                    window.removeEventListener('mouseup', onPanUp);
                 }
+
+                window.addEventListener('mousemove', onPanMove);
+                window.addEventListener('mouseup', onPanUp);
             });
             previewContainer.addEventListener('wheel', function(e) {
                 e.preventDefault();
@@ -3625,42 +3945,51 @@
                 var code = codeEditor ? codeEditor.value.trim() : '';
                 if (!code) return;
 
-                // PlantUML
-                if (currentDetectedType.id === 'plantuml' && currentRenderedXml) {
-                    graph.getModel().beginUpdate();
-                    try {
-                        var pt = graph.getFreeInsertPoint();
-                        var cells = ui.importXml(currentRenderedXml, Math.max(20, pt.x), Math.max(20, pt.y), true);
-                        graph.setSelectionCells(cells);
-                    } finally {
-                        graph.getModel().endUpdate();
+                function performInsert() {
+                    // PlantUML
+                    if (currentDetectedType.id === 'plantuml' && currentRenderedXml) {
+                        graph.getModel().beginUpdate();
+                        try {
+                            var pt = graph.getFreeInsertPoint();
+                            var cells = ui.importXml(currentRenderedXml, Math.max(20, pt.x), Math.max(20, pt.y), true);
+                            graph.setSelectionCells(cells);
+                        } finally {
+                            graph.getModel().endUpdate();
+                        }
+                        if (ui.showStatus) ui.showStatus('✓ Inserted editable PlantUML diagram', 2500);
+                        studioModal.style.display = 'none';
+                        return;
                     }
-                    if (ui.showStatus) ui.showStatus('✓ Inserted editable PlantUML diagram', 2500);
-                    studioModal.style.display = 'none';
-                    return;
+
+                    // Mermaid (including Markdown-to-Mindmap converted source)
+                    if (currentRenderedXml) {
+                        graph.getModel().beginUpdate();
+                        try {
+                            var wrapSource = currentRenderedSource || code;
+                            var insertXml = (typeof mxMermaidToDrawio !== 'undefined' && mxMermaidToDrawio.wrapGroup) ?
+                                mxMermaidToDrawio.wrapGroup(currentRenderedXml, wrapSource, EditorUi.getInsertMermaidConfig()) : currentRenderedXml;
+                            var ptM = graph.getFreeInsertPoint();
+                            var cellsM = ui.importXml(insertXml, Math.max(20, ptM.x), Math.max(20, ptM.y), true);
+                            graph.setSelectionCells(cellsM);
+                        } finally {
+                            graph.getModel().endUpdate();
+                        }
+                        if (ui.showStatus) ui.showStatus('✓ Inserted editable Mermaid diagram', 2500);
+                        studioModal.style.display = 'none';
+                        return;
+                    }
+
+                    // If Radar or Infographic SVG is active, insert crisp vector
+                    if (currentRenderedSvg) {
+                        insertSvgAsImageCell(currentRenderedSvg);
+                        studioModal.style.display = 'none';
+                    }
                 }
 
-                // Mermaid
-                if (currentRenderedXml) {
-                    graph.getModel().beginUpdate();
-                    try {
-                        var insertXml = (typeof mxMermaidToDrawio !== 'undefined' && mxMermaidToDrawio.wrapGroup) ?
-                            mxMermaidToDrawio.wrapGroup(currentRenderedXml, code, EditorUi.getInsertMermaidConfig()) : currentRenderedXml;
-                        var ptM = graph.getFreeInsertPoint();
-                        var cellsM = ui.importXml(insertXml, Math.max(20, ptM.x), Math.max(20, ptM.y), true);
-                        graph.setSelectionCells(cellsM);
-                    } finally {
-                        graph.getModel().endUpdate();
-                    }
-                    if (ui.showStatus) ui.showStatus('✓ Inserted editable Mermaid diagram', 2500);
-                    studioModal.style.display = 'none';
-                    return;
-                }
-
-                // If Radar or Infographic SVG is active, insert crisp vector
-                if (currentRenderedSvg) {
-                    insertSvgAsImageCell(currentRenderedSvg);
-                    studioModal.style.display = 'none';
+                if (renderDebounceTimer) {
+                    renderCurrentCode(performInsert);
+                } else {
+                    performInsert();
                 }
             };
             footerLeft.appendChild(btnInsertEditable);
@@ -3698,30 +4027,39 @@
             btnSaveHub.style.fontSize = '12px';
             btnSaveHub.style.fontWeight = '600';
             btnSaveHub.style.cursor = 'pointer';
-            btnSaveHub.title = 'Save this diagram card directly into the Diagrams & Folders Workspace';
+            btnSaveHub.title = 'Save this diagram card directly into the Diagrams & Folders Workspace (or PC disk folder)';
             btnSaveHub.onclick = function() {
-                appPrompt('Save to diagrams folder', currentDetectedType.label || 'My Diagram',
-                    'Saved into your default folder. Change it under ⚙ Workspace Settings.').then(function(title) {
+                var defaultTitle = (activeEditingDiagram && activeEditingDiagram.title) || currentDetectedType.label || 'My Diagram';
+                var promptHint = (activeEditingDiagram && activeEditingDiagram.fromDisk)
+                    ? ('Updates "' + activeEditingDiagram.fileName + '" on disk and in the Diagrams Hub.')
+                    : 'Saved into your default folder. Change it under ⚙ Default Save Folder in the Diagrams Hub.';
+                appPrompt('Save to diagrams folder', defaultTitle, promptHint).then(function(title) {
                     if (!title) return;
 
                     var data = getWorkspaceData();
-                    var targetFolder = getDefaultFolderId(data);
-                    var newDiag = {
-                        id: 'diag_' + Date.now(),
+                    var targetFolder = (activeEditingDiagram && activeEditingDiagram.folderId)
+                        ? activeEditingDiagram.folderId
+                        : getDefaultFolderId(data);
+
+                    saveDiagramToFolder({
                         title: title,
                         folderId: targetFolder,
                         code: codeEditor ? codeEditor.value : '',
                         xml: currentRenderedXml,
                         typeLabel: currentDetectedType.label || 'Diagram',
                         svgPreview: currentRenderedSvg || STARTER_SVGS.flowchart,
-                        updatedAt: Date.now(),
-                        starred: false
-                    };
-                    data.diagrams.unshift(newDiag);
-                    saveWorkspaceData(data);
-                    var folderName = (data.folders.filter(function(f) { return f.id === targetFolder; })[0] || {}).name || 'Personal';
-                    setStatus(true, 'Saved to Diagrams Folder ("' + folderName + '")');
-                    if (ui.showStatus) ui.showStatus('✓ Saved to Diagrams Workspace', 2500);
+                        existingDiagram: activeEditingDiagram
+                    }).then(function(res) {
+                        activeEditingDiagram = res.diagram;
+                        var msg = res.savedToDisk
+                            ? ('Saved "' + res.fileName + '" to disk ("' + res.folderName + '")')
+                            : ('Saved to Diagrams Folder ("' + res.folderName + '")');
+                        setStatus(true, msg);
+                        if (ui.showStatus) ui.showStatus('✓ ' + msg, 2500);
+                    }).catch(function(err) {
+                        setStatus(false, 'Could not save to disk: ' + (err.message || err));
+                        if (ui && ui.showError) ui.showError(mxResources.get('error'), 'Could not save to disk: ' + (err.message || err), mxResources.get('ok'));
+                    });
                 });
             };
             footerLeft.appendChild(btnSaveHub);
@@ -3769,7 +4107,7 @@
                 a.href = url;
                 a.download = 'diagram.svg';
                 a.click();
-                URL.revokeObjectURL(url);
+                setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
             };
             footerRight.appendChild(btnExportSvg);
 
@@ -3788,22 +4126,35 @@
                 var img = new Image();
                 var svgBlob = new Blob([currentRenderedSvg], { type: 'image/svg+xml;charset=utf-8' });
                 var url = URL.createObjectURL(svgBlob);
-                img.onload = function() {
-                    var canvas = document.createElement('canvas');
-                    canvas.width = (img.width || 800) * 2;
-                    canvas.height = (img.height || 600) * 2;
-                    var ctx = canvas.getContext('2d');
-                    ctx.scale(2, 2);
-                    ctx.drawImage(img, 0, 0);
+                img.onerror = function() {
                     URL.revokeObjectURL(url);
-                    canvas.toBlob(function(pngBlob) {
-                        var pUrl = URL.createObjectURL(pngBlob);
-                        var a = document.createElement('a');
-                        a.href = pUrl;
-                        a.download = 'diagram.png';
-                        a.click();
-                        URL.revokeObjectURL(pUrl);
-                    });
+                    setStatus(false, 'PNG export failed — could not rasterize SVG (try Export SVG instead)');
+                };
+                img.onload = function() {
+                    try {
+                        var canvas = document.createElement('canvas');
+                        canvas.width = (img.width || 800) * 2;
+                        canvas.height = (img.height || 600) * 2;
+                        var ctx = canvas.getContext('2d');
+                        ctx.scale(2, 2);
+                        ctx.drawImage(img, 0, 0);
+                        URL.revokeObjectURL(url);
+                        canvas.toBlob(function(pngBlob) {
+                            if (!pngBlob) {
+                                setStatus(false, 'PNG export failed — browser blocked canvas export (try Export SVG)');
+                                return;
+                            }
+                            var pUrl = URL.createObjectURL(pngBlob);
+                            var a = document.createElement('a');
+                            a.href = pUrl;
+                            a.download = 'diagram.png';
+                            a.click();
+                            setTimeout(function() { URL.revokeObjectURL(pUrl); }, 1000);
+                        });
+                    } catch (e) {
+                        URL.revokeObjectURL(url);
+                        setStatus(false, 'PNG export failed (SVG contains foreignObject) — use Export SVG instead');
+                    }
                 };
                 img.src = url;
             };

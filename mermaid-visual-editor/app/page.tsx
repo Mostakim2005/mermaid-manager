@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { ReactFlowProvider } from '@xyflow/react'
 import { Canvas, DEFAULT_STARTER_FLOWCHART } from '@/components/Canvas'
 import { TopToolbar } from '@/components/TopToolbar'
@@ -14,15 +14,13 @@ import { parseMermaidFlowchart } from '@/lib/parser'
 function EditorContent() {
   const [inspectorOpen, setInspectorOpen] = useState(true)
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [loadError, setLoadError] = useState<{ message: string; syntax: string } | null>(null)
 
   const { nodes, edges, direction, theme, look, curveStyle } = useFlowStore()
-  const syntax = serialize(nodes, edges, { direction, theme, look, curveStyle })
-
-  // Keep a ref to the latest syntax for synchronous message retrieval
-  const syntaxRef = useRef(syntax)
-  useEffect(() => {
-    syntaxRef.current = syntax
-  }, [syntax])
+  const syntax = useMemo(
+    () => serialize(nodes, edges, { direction, theme, look, curveStyle }),
+    [nodes, edges, direction, theme, look, curveStyle]
+  )
 
   // Mount logic: Load default starter flowchart if canvas is empty, then notify parent
   useEffect(() => {
@@ -43,6 +41,12 @@ function EditorContent() {
     const handleMessage = (event: MessageEvent) => {
       if (!event.data) return
 
+      // Sync dark/light theme from draw.io host
+      if (event.data.type === 'SET_THEME') {
+        document.documentElement.setAttribute('data-theme', event.data.dark ? 'dark' : 'light')
+        return
+      }
+
       // Draw.io requests current syntax (e.g. from dialog apply button)
       if (event.data.type === 'GET_MERMAID') {
         const state = useFlowStore.getState()
@@ -62,11 +66,19 @@ function EditorContent() {
       if (event.data.type === 'LOAD_MERMAID' && typeof event.data.syntax === 'string') {
         const res = parseMermaidFlowchart(event.data.syntax)
         if (res && !res.error && res.nodes && res.nodes.length > 0) {
+          setLoadError(null)
           useFlowStore.getState().importDiagram(res.nodes, res.edges, {
             direction: res.direction,
             theme: res.theme,
             look: res.look,
             curveStyle: res.curveStyle,
+          })
+        } else {
+          setLoadError({
+            message:
+              res?.error ||
+              'The 2-Way Visual Editor currently supports Mermaid flowchart/graph diagrams.',
+            syntax: event.data.syntax,
           })
         }
       }
@@ -96,6 +108,70 @@ function EditorContent() {
       {/* Canvas zone */}
       <div style={{ position: 'relative', flex: 1, background: 'var(--neu-bg)' }}>
         <Canvas onOpenPalette={() => setPaletteOpen(true)} />
+
+        {/* Non-blocking parse error banner when unsupported diagram is loaded */}
+        {loadError && (
+          <div
+            role="alert"
+            style={{
+              position: 'absolute',
+              top: 66,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 30,
+              maxWidth: 560,
+              background: '#fef2f2',
+              color: '#991b1b',
+              border: '1px solid #fecaca',
+              borderRadius: 10,
+              padding: '8px 14px',
+              boxShadow: '0 6px 20px rgba(15, 23, 42, 0.14)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              fontSize: 12,
+            }}
+          >
+            <span style={{ flex: 1 }}>
+              <strong>Could not open in 2-Way Editor:</strong> {loadError.message}
+            </span>
+            {typeof window !== 'undefined' && window.parent && window.parent !== window && (
+              <button
+                onClick={() => {
+                  window.parent.postMessage({ type: 'OPEN_IN_STUDIO', syntax: loadError.syntax }, '*')
+                  setLoadError(null)
+                }}
+                style={{
+                  background: '#2563eb',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: 6,
+                  padding: '4px 10px',
+                  fontSize: 11,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Open in Studio
+              </button>
+            )}
+            <button
+              onClick={() => setLoadError(null)}
+              aria-label="Dismiss"
+              style={{
+                background: 'transparent',
+                color: '#991b1b',
+                border: 'none',
+                fontSize: 14,
+                cursor: 'pointer',
+                padding: '0 4px',
+              }}
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* Top overlay - toolbar */}
         <div

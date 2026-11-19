@@ -77,8 +77,8 @@ sequenceDiagram
   * `mermaid-visual-editor/app/page.tsx` -> `handleMessage`
 
 ### [SUBSYSTEM: Blessed-Path IPC Disk Access] | Aliases: folder authorization, mermaid IPC, file security
-> **1-Line Summary:** The hub's disk powers go through four main-process actions that only trust folders the user picked in the native dialog, re-deriving every child path safely on the trusted side.
-* **How It Works (Plain English):** `showOpenDialog` blesses the picked folder (persisted in `%APPDATA%\draw.io\config.json` under `blessedPaths`). Each IPC call re-checks the blessing with native realpaths, sanitizes the child name (no `..`, no separators, no Windows device names), keeps it inside the folder, and caps content at 5 MB with an extension allow-list.
+> **1-Line Summary:** The hub's disk powers go through five main-process actions that only trust folders the user picked in the native dialog, re-deriving every child path safely on the trusted side.
+* **How It Works (Plain English):** `showOpenDialog` blesses the picked folder (persisted in `%APPDATA%\draw.io\config.json` under `blessedPaths`). Each IPC call (`mermaidListFolder`, `mermaidReadFile`, `mermaidWriteFile`, `mermaidDeleteFile`, `mermaidMakeFolder`) re-checks the blessing with native realpaths, sanitizes the child name (no `..`, no separators, no Windows device names including multi-dot variants), keeps it inside the folder, and enforces UTF-8 byte-length caps (5 MB) plus strict read/write/delete extension allow-lists.
 * **Data Flow Diagram:**
 
 ```mermaid
@@ -92,28 +92,30 @@ sequenceDiagram
     F-->>M: entries
     M-->>H: [{name, size, mtime}]
     H->>M: mermaidReadFile(folder, name)
-    M->>M: sanitize name + containment check
+    M->>M: sanitize name + read ext allow-list + containment check
     M->>F: readFile (≤5 MB, utf8)
     F-->>M: text
     M-->>H: Mermaid source
 ```
 
 * **Code Anchors (Grep Targets):**
-  * `drawio-desktop/src/main/electron.js` -> `mermaidAuthFolder`, `mermaidContainedChild`, `reqMermaidName`, `showOpenDialog`, `assertWritablePath`, `assertReadablePath`
-  * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js` -> `ipcRequest`, `pickDiskFolder`, `scanDiskFolder`
+  * `drawio-desktop/src/main/mermaid-ipc.js` -> `reqMermaidName`, `assertMermaidReadExt`, `assertMermaidWriteExt`, `assertMermaidWriteSize`, `resolveNextAssetRedirect`
+  * `drawio-desktop/src/main/electron.js` -> `mermaidAuthFolder`, `mermaidContainedChild`, `mermaidMakeFolder`, `showOpenDialog`, `assertWritablePath`, `assertReadablePath`
+  * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js` -> `ipcRequest`, `pickDiskFolder`, `scanDiskFolder`, `saveDiagramToFolder`, `deleteDiagramFromHub`
 
 ### [SUBSYSTEM: Contrast-Safe SVG Pipeline] | Aliases: light-dark, contrast inversion, dark mode text
 > **1-Line Summary:** Every SVG the studio previews has its `light-dark()` pairs resolved with paren-aware parsing and its `color-scheme` pinned, so OS dark mode can never invert text on a light canvas.
 * **How It Works (Plain English):** draw.io emits `fill: light-dark(a, b)` with commas inside `rgb(...)`. A naive comma split mangles them. `splitLightDarkArgs` walks the args with parenthesis depth, picks the value for the canvas being drawn on, and rewrites `color-scheme` to match.
 * **Code Anchors (Grep Targets):**
-  * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js` -> `resolveLightDarkCss`, `splitLightDarkArgs`, `parseCssColor`, `contrastRatio`
+  * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js` -> `resolveLightDarkCss`, `splitLightDarkArgs`, `isDarkMode`
 
 ### [SUBSYSTEM: Visual Editor Bundle Sync] | Aliases: next build, bundle swap, out directory, hydration
 > **1-Line Summary:** A sync script builds the Next.js editor and atomically swaps it into the webapp, keeping absolute `/_next/` URLs so the Turbopack runtime can still find its chunks over `file://`.
-* **How It Works (Plain English):** Build → verify every referenced chunk exists on disk → stage a fresh copy → swap the directory in one rename → re-check for stale chunks. electron.js redirects any `/_next/*` request into the bundled folder.
+* **How It Works (Plain English):** Build → verify every referenced chunk exists on disk → stage a fresh copy → swap the directory in one rename → re-check for stale chunks. `electron.js` redirects valid `/_next/static/*` requests into the bundled folder via `resolveNextAssetRedirect` and cancels malformed/traversal requests.
 * **Code Anchors (Grep Targets):**
   * `scripts/sync-visual-editor.cjs` -> build pipeline + `fs.renameSync` swap
   * `drawio-desktop/src/main/electron.js` -> `onBeforeRequest` `/_next/` redirect
+  * `drawio-desktop/src/main/mermaid-ipc.js` -> `resolveNextAssetRedirect`
 
 ## 4. Verification & Health Checks
 
@@ -122,11 +124,13 @@ sequenceDiagram
 
 * **Syntax gates (main process + plugin):**
   `node --check drawio-desktop/src/main/electron.js`
+  `node --check drawio-desktop/src/main/mermaid-ipc.js`
   `node --check "drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js"`
+* **Host & Auto-Fixer unit tests:** `cd drawio-desktop && npm test`
 * **Editor build:** `node scripts/sync-visual-editor.cjs` (builds with Next/Turbopack, fails on missing chunks)
-* **Editor unit tests:** `node --test mermaid-visual-editor/lib/fileio.test.ts mermaid-visual-editor/lib/serializer.test.ts mermaid-visual-editor/lib/store.test.ts`
-* **End-to-end app regression (real Electron over CDP):** `node scripts/verify-ipc-integration.mjs <drawio-desktop path>` — asserts hydration, hub dialogs, IPC round-trip, and security refusals
-* **Packaged exe regression:** `node scripts/verify-packaged-exe.mjs <releases path>`
+* **Editor unit tests:** `cd mermaid-visual-editor && node --test lib/*.test.ts`
+* **End-to-end app regression (real Electron over CDP):** `node scripts/verify-ipc-integration.mjs drawio-desktop` — uses an isolated temp profile and asserts hydration, hub dialogs, IPC round-trip, and security refusals
+* **Packaged exe regression:** `node scripts/verify-packaged-exe.mjs releases`
 * **Portable + installer packaging:** `cd drawio-desktop; node ./sync.cjs; $env:DRAWIO_UNSIGNED='true'; npx electron-builder --config electron-builder-win.json --publish never` (produces both `-Portable.exe` and `-Setup.exe`)
 
 ## 5. Repository, Licensing & Cloud Build

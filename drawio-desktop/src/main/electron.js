@@ -18,6 +18,16 @@ import { getPrintOptions } from './print-options.js';
 import FileWatcher from './file-watcher.js';
 import { ConfigPathGrants } from './config-paths.js';
 import { getUrlParams, getUrlParamsFiles } from './url-params.js';
+import {
+	MERMAID_READ_RE,
+	MERMAID_MAX_FILE_BYTES,
+	MERMAID_MAX_LIST_ENTRIES,
+	reqMermaidName,
+	assertMermaidReadExt,
+	assertMermaidWriteExt,
+	assertMermaidWriteSize,
+	resolveNextAssetRedirect
+} from './mermaid-ipc.js';
 import elecUpPkg from 'electron-updater';
 const {autoUpdater} = elecUpPkg;
 import {PDFDocument, PDFHexString, PDFName} from '@cantoo/pdf-lib';
@@ -850,10 +860,16 @@ app.whenReady().then(() =>
 		// Next.js chunks or assets might request /_next/ relative to root
 		if (url.includes('/_next/') && !url.includes('/mermaid-visual-editor/_next/'))
 		{
-			const nextPath = url.split('/_next/')[1];
-			const normalizedCodeUrl = codeUrl.endsWith('/') ? codeUrl : codeUrl + '/';
-			const redirectUrl = normalizedCodeUrl + 'mermaid-visual-editor/_next/' + nextPath;
-			callback({redirectURL: redirectUrl});
+			const redirectUrl = resolveNextAssetRedirect(url, codeUrl);
+			if (redirectUrl)
+			{
+				callback({redirectURL: redirectUrl});
+			}
+			else
+			{
+				console.log('Blocked invalid _next asset request:', details.url);
+				callback({cancel: true});
+			}
 			return;
 		}
 
@@ -4210,39 +4226,8 @@ async function writeFile(filePath, data, enc)
 // valid for the general writeFile path, and the content bound here is
 // size-capped instead.
 // --------------------------------------------------------------------
-const MERMAID_READ_RE = /\.(mmd|md|markdown)$/i;
-const MERMAID_WRITE_RE = /\.(mmd|md|markdown|drawio)$/i;
-const MERMAID_MAX_FILE_BYTES = 5 * 1024 * 1024;
-const MERMAID_MAX_NAME_LEN = 200;
-const MERMAID_MAX_LIST_ENTRIES = 2000;
-
-// CON, NUL etc. are reserved device names on Windows and must never be
-// created through the hub, and Windows silently strips trailing dots and
-// spaces, so a name ending in either is not the name the caller asked for.
-const WINDOWS_RESERVED_NAMES = new Set([
-	'CON', 'PRN', 'AUX', 'NUL',
-	'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9',
-	'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9'
-]);
-
-function reqMermaidName(name)
-{
-	reqStr(name, 'name');
-
-	if (name.length > MERMAID_MAX_NAME_LEN || /[\\/:*?"<>|]/.test(name) ||
-		name === '.' || name === '..' || name.includes('\0') ||
-		/[. ]$/.test(name))
-	{
-		throw new Error('bad name');
-	}
-
-	if (WINDOWS_RESERVED_NAMES.has(name.replace(/\.[^.]*$/, '').toUpperCase()))
-	{
-		throw new Error('bad name');
-	}
-
-	return name;
-}
+// Validation constants and reqMermaidName / extension / byte-size checks live
+// in ./mermaid-ipc.js so they are unit-tested independently of Electron.
 
 // The exact folder must be user-authorized (blessed via the native
 // picker) and must be a directory. Returns its native realpath so
@@ -4639,7 +4624,7 @@ ipcMain.on("rendererReq", async (event, args) =>
 		case 'mermaidReadFile':
 			{
 				reqStr(args.folder, 'folder');
-				const name = reqMermaidName(args.name);
+				const name = assertMermaidReadExt(args.name);
 				const folderReal = await mermaidAuthFolder(event.sender, args.folder, false);
 				const child = await mermaidContainedChild(folderReal, name);
 				const st = await fsProm.stat(child);
@@ -4658,18 +4643,9 @@ ipcMain.on("rendererReq", async (event, args) =>
 			{
 				reqStr(args.folder, 'folder');
 				reqStr(args.data, 'data');
+				assertMermaidWriteSize(args.data);
 
-				if (args.data.length > MERMAID_MAX_FILE_BYTES)
-				{
-					throw new Error('content too large (max ' + (MERMAID_MAX_FILE_BYTES / 1024 / 1024) + ' MB)');
-				}
-
-				if (!MERMAID_WRITE_RE.test(String(args.name || '')))
-				{
-					throw new Error('bad extension (use .mmd, .md, .markdown or .drawio)');
-				}
-
-				const name = reqMermaidName(args.name);
+				const name = assertMermaidWriteExt(args.name);
 				const folderReal = await mermaidAuthFolder(event.sender, args.folder, true);
 				const child = await mermaidContainedChild(folderReal, name);
 
@@ -4691,7 +4667,7 @@ ipcMain.on("rendererReq", async (event, args) =>
 		case 'mermaidDeleteFile':
 			{
 				reqStr(args.folder, 'folder');
-				const name = reqMermaidName(args.name);
+				const name = assertMermaidWriteExt(args.name);
 				const folderReal = await mermaidAuthFolder(event.sender, args.folder, true);
 				const child = await mermaidContainedChild(folderReal, name);
 
@@ -4702,6 +4678,18 @@ ipcMain.on("rendererReq", async (event, args) =>
 
 				await fsProm.unlink(child);
 				ret = true;
+			}
+			break;
+		case 'mermaidMakeFolder':
+			{
+				reqStr(args.folder, 'folder');
+				const name = reqMermaidName(args.name);
+				const folderReal = await mermaidAuthFolder(event.sender, args.folder, true);
+				const child = await mermaidContainedChild(folderReal, name);
+
+				await fsProm.mkdir(child, { recursive: false });
+				blessPath(child);
+				ret = child;
 			}
 			break;
 		case 'showSaveDialog':

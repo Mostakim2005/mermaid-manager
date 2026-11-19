@@ -57,3 +57,39 @@ test('serialize default shape', () => {
   const output = serialize(nodes as any, [])
   assert.ok(output.includes('n_default["Default"]'))
 })
+
+test('serialize nested subgraphs recursively', () => {
+  const nodes = [
+    {
+      id: 'sg_outer',
+      data: { label: 'Outer Group', isSubgraph: true },
+      position: { x: 0, y: 0 },
+    },
+    {
+      id: 'sg_inner',
+      parentId: 'sg_outer',
+      data: { label: 'Inner Group', isSubgraph: true },
+      position: { x: 20, y: 20 },
+    },
+    {
+      id: 'n_leaf',
+      parentId: 'sg_inner',
+      data: { label: 'Leaf Node', shape: 'rectangle' },
+      position: { x: 40, y: 40 },
+    },
+  ]
+
+  const output = serialize(nodes as any, [])
+  const lines = output.split('\n')
+  const outerStart = lines.findIndex((l) => l.includes('subgraph sg_outer ["Outer Group"]'))
+  const innerStart = lines.findIndex((l) => l.includes('subgraph sg_inner ["Inner Group"]'))
+  const leafLine = lines.findIndex((l) => l.includes('n_leaf["Leaf Node"]'))
+  const firstEnd = lines.findIndex((l, idx) => idx > leafLine && l.trim() === 'end')
+  const secondEnd = lines.findIndex((l, idx) => idx > firstEnd && l.trim() === 'end')
+
+  assert.ok(outerStart >= 0, 'outer subgraph missing')
+  assert.ok(innerStart > outerStart, 'inner subgraph should appear inside outer subgraph')
+  assert.ok(leafLine > innerStart, 'leaf node should appear inside inner subgraph')
+  assert.ok(firstEnd > leafLine, 'inner end missing')
+  assert.ok(secondEnd > firstEnd, 'outer end missing')
+})

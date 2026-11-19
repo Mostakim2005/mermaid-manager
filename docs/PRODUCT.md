@@ -40,11 +40,13 @@
   * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js` -> `openDiagramsHub`, `renderHubView`, `addDiskFolder`, `refreshDiskFolder`, `getDefaultFolderId`, `inAppDialog`, `appPrompt`, `appConfirm`
 
 ### [FEATURE: Electron Disk Access over IPC] | Aliases: IPC, file access, blessed paths, read write files
-> **1-Line Summary:** Four main-process IPC actions let the hub list/read/write/delete Mermaid files in folders the user authorized through the native picker, with the same symlink/extension/size protections as draw.io itself.
-* **User Intention (Non-Negotiable):** The renderer is semi-untrusted: only folders blessed via the native dialog are readable/writable; grants persist across launches; traversal (`..`), reserved device names (`CON`), non-text extensions and >5 MB content are refused.
-* **Visual / UI Behavior:** Invisible to the user except through the hub's PC-folder buttons.
+> **1-Line Summary:** Five main-process IPC actions let the hub list/read/write/delete Mermaid files and create subdirectories in folders the user authorized through the native picker, with the same symlink/extension/size protections as draw.io itself.
+* **User Intention (Non-Negotiable):** The renderer is semi-untrusted: only folders blessed via the native dialog are readable/writable; grants persist across launches; traversal (`..`), reserved device names (`CON`, `CON.foo.mmd`), non-text extensions and >5 MB UTF-8 payloads are refused.
+* **Visual / UI Behavior:** Invisible to the user except through the hub's PC-folder buttons and disk-backed diagram save/delete actions.
 * **Code Anchors (Grep Targets):**
-  * `drawio-desktop/src/main/electron.js` -> `mermaidAuthFolder`, `mermaidContainedChild`, `reqMermaidName`, `rendererReq`
+  * `drawio-desktop/src/main/mermaid-ipc.js` -> `reqMermaidName`, `assertMermaidReadExt`, `assertMermaidWriteExt`, `assertMermaidWriteSize`
+  * `drawio-desktop/src/main/electron.js` -> `mermaidAuthFolder`, `mermaidContainedChild`, `mermaidMakeFolder`, `rendererReq`
+  * `drawio-desktop/drawio/src/main/webapp/plugins/mermaid-visual-editor.js` -> `saveDiagramToFolder`, `deleteDiagramFromHub`, `ipcMakeDiskFolder`
 
 ### [FEATURE: Native Drawio Toolbar and Side Panels] | Aliases: toolbar, Diagrams button, Paste Code button, collapse panels
 > **1-Line Summary:** Native-styled toolbar buttons (Diagrams, Paste Code → Auto-Render, 2-Way Visual Editor, Quick Templates) plus `«`/`»` collapse tabs for distraction-free diagramming.
@@ -82,4 +84,5 @@
 ### [WISHLIST: App-Created Folders On Disk] | Aliases: real folders, new folder on disk, write folders
 > **1-Line Summary:** Let "New Folder" create a real directory on disk (not just a hub label) once folder-write support is generalized.
 * **User Intention:** Folders created in the app should live on the C: drive alongside PC-imported ones.
-* **Target Integration Point:** `addDiskFolder` / new `mermaidMakeFolder` IPC action; requires folder-create authorization in `mermaidAuthFolder`.
+* **Target Integration Point:** `addDiskFolder` / `mermaidMakeFolder` IPC action (`ipcMakeDiskFolder`).
+* **Status:** Main-process `mermaidMakeFolder` IPC action and `ipcMakeDiskFolder` plugin helper implemented; Hub "New Folder" UI option to create on disk under a blessed parent folder pending.

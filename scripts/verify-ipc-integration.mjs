@@ -1,29 +1,36 @@
 // End-to-end verification: launches the REAL draw.io app (real main process,
 // real preload, real blessedPaths store) with a DevTools port, then drives the
 // page over CDP: IPC disk actions, hub, visual editor.
-//   node _verify3.mjs
+//   node scripts/verify-ipc-integration.mjs drawio-desktop
 import { spawn, execSync } from 'child_process'
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
 
-const ROOT = path.resolve(process.argv[2] || '.')
+const ROOT = path.resolve(process.argv[2] || 'drawio-desktop')
 const PORT = 9333
 const TEST_DIR = path.join(ROOT, '..', '_ipctest')
+const USER_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'mmd-ipc-profile-'))
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 
 // --- fixtures -------------------------------------------------------------
 fs.mkdirSync(TEST_DIR, { recursive: true })
-fs.writeFileSync(path.join(TEST_DIR, 'hello-flow.mmd'), 'flowchart TD\n  A[Hello] --> B[World]\n')
-fs.writeFileSync(path.join(TEST_DIR, 'doc.md'), '# Doc\n\n```mermaid\nflowchart LR\n X --> Y\n```\n')
-fs.writeFileSync(path.join(TEST_DIR, 'ignored.txt'), 'not a diagram')
+fs.writeFileSync(path.join(TEST_DIR, 'hello-flow.mmd'), 'flowchart TD\n  A[Hello] --> B[World]\n', 'utf8')
+fs.writeFileSync(path.join(TEST_DIR, 'doc.md'), '# Doc\n\n```mermaid\nflowchart LR\n X --> Y\n```\n', 'utf8')
+fs.writeFileSync(path.join(TEST_DIR, 'ignored.txt'), 'not a diagram', 'utf8')
+// Pre-bless TEST_DIR in isolated user-data-dir using BOM-free UTF-8 JSON (TRAP 1)
+fs.writeFileSync(
+  path.join(USER_DATA_DIR, 'config.json'),
+  JSON.stringify({ blessedPaths: [TEST_DIR] }, null, 2),
+  'utf8'
+)
 // an unauthorised directory (NOT in blessedPaths)
 const DENIED_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'mmd-denied-'))
-fs.writeFileSync(path.join(DENIED_DIR, 'secret.mmd'), 'flowchart TD\n Z --> W\n')
+fs.writeFileSync(path.join(DENIED_DIR, 'secret.mmd'), 'flowchart TD\n Z --> W\n', 'utf8')
 
 // --- launch real app -------------------------------------------------------
-const electronCmd = 'node_modules\\.bin\\electron.cmd . --remote-debugging-port=' + PORT
+const electronCmd = `node_modules\\.bin\\electron.cmd . --remote-debugging-port=${PORT} "--user-data-dir=${USER_DATA_DIR}"`
 // ELECTRON_RUN_AS_NODE would make Electron start as a plain Node REPL with no
 // app and no CDP server; it must never leak into the child.
 const childEnv = { ...process.env }
@@ -184,4 +191,6 @@ try {
   try { ws && ws.close() } catch (e) {}
   try { execSync('taskkill /PID ' + child.pid + ' /T /F', { stdio: 'ignore' }) } catch (e) {}
   try { execSync('taskkill /IM electron.exe /F', { stdio: 'ignore' }) } catch (e) {}
+  try { fs.rmSync(USER_DATA_DIR, { recursive: true, force: true }) } catch (e) {}
+  try { fs.rmSync(DENIED_DIR, { recursive: true, force: true }) } catch (e) {}
 }

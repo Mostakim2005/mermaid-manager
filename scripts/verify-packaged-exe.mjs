@@ -4,17 +4,44 @@ import fs from 'fs'
 import path from 'path'
 import os from 'os'
 
-const ROOT = path.resolve(process.argv[2])
+const ARG = path.resolve(process.argv[2] || 'releases')
 const PORT = 9444
-const EXE = path.join(ROOT, 'MermaidApp-draw.io-v32.6.1-Portable.exe')
+let EXE = ARG
+if (!EXE.toLowerCase().endsWith('.exe')) {
+  const candidates = fs.existsSync(ARG)
+    ? fs.readdirSync(ARG)
+        .filter(f => /^MermaidApp-draw\.io-v.*-Portable\.exe$/i.test(f))
+        .map(f => ({ name: f, full: path.join(ARG, f), mtime: fs.statSync(path.join(ARG, f)).mtimeMs }))
+        .sort((a, b) => b.mtime - a.mtime)
+    : []
+  if (candidates.length === 0) {
+    throw new Error(`No MermaidApp-draw.io-v*-Portable.exe found in ${ARG}`)
+  }
+  EXE = candidates[0].full
+}
 const TEST_DIR = path.join(os.tmpdir(), 'mmd-packaged-test')
+const USER_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'mmd-packaged-profile-'))
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 fs.rmSync(TEST_DIR, { recursive: true, force: true })
 fs.mkdirSync(TEST_DIR, { recursive: true })
-fs.writeFileSync(path.join(TEST_DIR, 'packaged.mmd'), 'flowchart TD\n  P[Packed] --> Q[Test]\n')
+fs.writeFileSync(path.join(TEST_DIR, 'packaged.mmd'), 'flowchart TD\n  P[Packed] --> Q[Test]\n', 'utf8')
+// Pre-bless TEST_DIR in isolated user-data-dir using BOM-free UTF-8 JSON (TRAP 1)
+fs.writeFileSync(
+  path.join(USER_DATA_DIR, 'config.json'),
+  JSON.stringify({ blessedPaths: [TEST_DIR] }, null, 2),
+  'utf8'
+)
 
-const child = spawn(EXE, [`--remote-debugging-port=${PORT}`], { stdio: 'ignore', detached: false })
+// ELECTRON_RUN_AS_NODE would make Electron start as a plain Node REPL with no
+// app and no CDP server; it must never leak into the child (TRAP 6).
+const childEnv = { ...process.env }
+delete childEnv.ELECTRON_RUN_AS_NODE
+const child = spawn(EXE, [`--remote-debugging-port=${PORT}`, `--user-data-dir=${USER_DATA_DIR}`], {
+  stdio: 'ignore',
+  detached: false,
+  env: childEnv,
+})
 let msgId = 0
 const pending = new Map()
 let ws
@@ -110,4 +137,5 @@ try {
   try { ws && ws.close() } catch (e) {}
   try { execSync('taskkill /PID ' + child.pid + ' /T /F', { stdio: 'ignore' }) } catch (e) {}
   try { execSync('taskkill /IM MermaidApp-draw.io.exe /F', { stdio: 'ignore' }) } catch (e) {}
+  try { fs.rmSync(USER_DATA_DIR, { recursive: true, force: true }) } catch (e) {}
 }

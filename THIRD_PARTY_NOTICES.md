@@ -33,15 +33,14 @@ These components are packaged into the portable `.exe` (directly or inside `app.
 | Mermaid.js | 11.x | MIT | https://github.com/mermaid-js/mermaid |
 | @dagrejs/dagre | 2.x | MIT | https://github.com/dagrejs/dagre |
 | Next.js (static export runtime) | 16.x | MIT | https://github.com/vercel/next.js |
-| serve | 14.x | MIT | https://github.com/vercel/serve |
 
-## Build / test only — not shipped
+## Build / test / standalone CLI only — not shipped
 
-These are used to compile, package, or test the app and are not part of the installed
-application payload.
+These are used to compile, package, test, or run the standalone visual editor CLI and are not part of the installed desktop application payload.
 
 | Component | Version | License | Upstream |
 |---|---|---|---|
+| serve (standalone visual editor CLI only) | 14.x | MIT | https://github.com/vercel/serve |
 | electron-builder | 26.x | MIT | https://github.com/electron-userland/electron-builder |
 | @electron/fuses | 2.x | MIT | https://github.com/electron/fuses |
 | @electron/notarize | 3.x | MIT | https://github.com/electron/notarize |
